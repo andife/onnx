@@ -7,6 +7,7 @@
 [![Build Status](https://dev.azure.com/onnx-pipelines/onnx/_apis/build/status/Linux-CI?branchName=main)](https://dev.azure.com/onnx-pipelines/onnx/_build/latest?definitionId=7&branchName=main)
 [![Build Status](https://dev.azure.com/onnx-pipelines/onnx/_apis/build/status/MacOS-CI?branchName=main)](https://dev.azure.com/onnx-pipelines/onnx/_build/latest?definitionId=6&branchName=main)
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/3313/badge)](https://bestpractices.coreinfrastructure.org/projects/3313)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fandife%2Fonnx.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fandife%2Fonnx?ref=badge_shield)
 
 [Open Neural Network Exchange (ONNX)](https://onnx.ai) is an open ecosystem that empowers AI developers
 to choose the right tools as their project evolves. ONNX provides an open source format for AI models, both deep learning and traditional ML. It defines an extensible computation graph model, as well as definitions of built-in operators and standard
@@ -275,6 +276,9 @@ Check out the [contributor guide](docs/CONTRIBUTING.md) for instructions.
 # License
 
 [Apache License v2.0](LICENSE)
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fandife%2Fonnx.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fandife%2Fonnx?ref=badge_large)
 
 # Code of Conduct
 
