@@ -12,3 +12,4 @@ sphinx-exec-code
 sphinx-gallery
 sphinx-tabs
 sphinx
+sympy>=1.12 # not directly required, pinned by Snyk to avoid a vulnerability
