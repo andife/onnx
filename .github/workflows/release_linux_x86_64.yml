@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
 
     environment:
-      name: pypi_test
+      name: testpypi
       url: https://test.pypi.org/p/af_test_onnx_sigstore
 
     permissions:
@@ -160,7 +160,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: >-
-        gh release create '${{ env.date }}'        
+        gh release create ${{ $(date '%Y%m%d_%H%M%S') }}
         --repo '${{ github.repository }}'
         --notes ""
     - name: Upload artifact signatures to GitHub Release
