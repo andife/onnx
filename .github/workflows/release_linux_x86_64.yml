@@ -99,6 +99,31 @@ jobs:
         export ORT_MAX_ONNX_OPSET_SUPPORTED_VERSION=19
         pytest
 
+  publish-to-testpypi:
+    name: Publish Python 🐍 distribution 📦 to TestPyPI
+    needs:
+    - build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/af_test_onnx_sigstore
+
+    permissions:
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
+
+    steps:
+    - name: Download all the dists
+      uses: actions/download-artifact@v3
+      with:
+        name: wheels # Changes
+        path: dist/
+    - name: Publish distribution 📦 to TestPyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+      
+
 
   github-release:
     name: >-
