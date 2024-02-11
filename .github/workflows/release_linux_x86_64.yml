@@ -115,12 +115,14 @@ jobs:
 
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/af_test_onnx_sigstore
+      url: https://test.pypi.org/p/af-test-onnx-sigstore
 
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
 
     steps:
+
+
     - name: Download all the dists
       uses: actions/download-artifact@v3
       with:
@@ -147,6 +149,12 @@ jobs:
       id-token: write  # IMPORTANT: mandatory for sigstore
 
     steps:
+    - name: Test1
+      id: t1
+      uses: Kaven-Universe/github-action-current-date-time@v1
+      with:
+        format: "YYYY_MM_DD HH_mm_ss_SSS"
+
     - name: Download all the dists
       uses: actions/download-artifact@v3
       with:
