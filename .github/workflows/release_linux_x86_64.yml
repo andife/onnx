@@ -106,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
 
     environment:
-      name: testpypi
+      name: pypi_test
       url: https://test.pypi.org/p/af_test_onnx_sigstore
 
     permissions:
