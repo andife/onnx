@@ -23,10 +23,12 @@ jobs:
         architecture: ['x64']        
 
     steps:
-    # - name: Get current date
-    #   id: date
-    #   run: |
-    #     echo "{date}={$(date +'%Y%m%d_%H%M%S')}" >> $GITHUB_STATE
+    
+    - name: Test1
+      id: t1
+      uses: Kaven-Universe/github-action-current-date-time@v1
+      with:
+        format: "YYYY_MM_DD HH_mm_ss_SSS"
 
 
     - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
@@ -160,7 +162,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: >-
-        gh release create ${{ $(date '%Y%m%d_%H%M%S') }}
+        gh release create ${{ steps.t1.outputs.time }}"
         --repo '${{ github.repository }}'
         --notes ""
     - name: Upload artifact signatures to GitHub Release
