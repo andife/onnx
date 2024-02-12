@@ -5,7 +5,7 @@ requires = ["setuptools>=64", "protobuf>=3.20.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "onnx"
+name = "af_test_onnx_sigstore"
 dynamic = ["version", "dependencies", "optional-dependencies"]
 description = "Open Neural Network Exchange"
 readme = "README.md"
