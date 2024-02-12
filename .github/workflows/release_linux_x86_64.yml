@@ -150,10 +150,10 @@ jobs:
 
     steps:
     - name: Test1
-      id: t1
+      id: t2
       uses: Kaven-Universe/github-action-current-date-time@v1
       with:
-        format: "YYYY_MM_DD HH_mm_ss_SSS"
+        format: "YYYYMMDD_HHmmssSSS"
 
     - name: Download all the dists
       uses: actions/download-artifact@v3
