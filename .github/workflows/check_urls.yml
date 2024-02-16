@@ -1,3 +1,7 @@
+# Copyright (c) ONNX Project Contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+
 name: Check URLs
 
 on:
@@ -7,6 +11,9 @@ on:
     # Run every month
     - cron:  '0 0 1 * *'
   workflow_dispatch:
+
+permissions:  # set top-level default permissions as security best practice
+  contents: read
 
 jobs:
   build:

@@ -1,6 +1,13 @@
+# Copyright (c) ONNX Project Contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+
 name: DCO
 on:
   merge_group:
+
+permissions:  # set top-level default permissions as security best practice
+  contents: read
 
 jobs:
   DCO:
