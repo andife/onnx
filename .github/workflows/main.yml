@@ -226,6 +226,6 @@ jobs:
           merge-multiple: true
 
       - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@567cc7f8dcea3eba5da355f6ebc95663310d8a07
+        uses: EnricoMi/publish-unit-test-result-action@e2824a5844448023e58dffc0f05ef45496eeb11c
         with:
           files: "artifacts/**/*.xml"
