@@ -16,3 +16,4 @@ lintrunner-adapters>=0.12.3
 # Edit additional linter dependencies in requirements-lintrunner.txt
 # Dependencies for the reference implementation.
 -r requirements-reference.txt
+tornado>=6.5 # not directly required, pinned by Snyk to avoid a vulnerability
