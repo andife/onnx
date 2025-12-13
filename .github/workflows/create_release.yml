@@ -102,7 +102,7 @@ jobs:
         with:
           inputs: >-
             /home/runner/work/onnx/onnx/dist/*.whl
-      - uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: github.event_name != 'pull_request' || startsWith( github.base_ref, 'rel-')
         with:
           name: sigstore-files
