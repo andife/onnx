@@ -46,6 +46,7 @@ ONNX_BUILD_TESTS = os.getenv("ONNX_BUILD_TESTS") == "1"
 ONNX_DISABLE_EXCEPTIONS = os.getenv("ONNX_DISABLE_EXCEPTIONS") == "1"
 ONNX_DISABLE_STATIC_REGISTRATION = os.getenv("ONNX_DISABLE_STATIC_REGISTRATION") == "1"
 ONNX_PREVIEW_BUILD = os.getenv("ONNX_PREVIEW_BUILD") == "1"
+ONNX_SCIENTIFIC_PYTHON_BUILD = os.getenv("ONNX_SCIENTIFIC_PYTHON_BUILD") == "1"
 
 USE_MSVC_STATIC_RUNTIME = os.getenv("USE_MSVC_STATIC_RUNTIME", "0") == "1"
 DEBUG = os.getenv("DEBUG", "0") == "1"
@@ -76,7 +77,13 @@ except (OSError, subprocess.CalledProcessError):
 
 with open(os.path.join(TOP_DIR, "VERSION_NUMBER"), encoding="utf-8") as version_file:
     _version = version_file.read().strip()
-    if ONNX_PREVIEW_BUILD:
+    if ONNX_SCIENTIFIC_PYTHON_BUILD:
+        # Create the scientific-python build
+        todays_date = datetime.date.today().strftime("%Y%m%d")
+        _version += ".dev" + todays_date
+        if _git_version:
+            _version += "+g" + _git_version
+    elif ONNX_PREVIEW_BUILD:
         # Create the dev build for weekly releases
         todays_date = datetime.date.today().strftime("%Y%m%d")
         _version += ".dev" + todays_date
