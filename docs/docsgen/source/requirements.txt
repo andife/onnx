@@ -12,3 +12,4 @@ sphinx-exec-code
 sphinx-gallery
 sphinx-tabs
 sphinx
+protobuf>=6.33.5 # not directly required, pinned by Snyk to avoid a vulnerability
