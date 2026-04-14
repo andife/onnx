@@ -8,15 +8,7 @@ on:
   schedule:
     - cron:  '0 0 * * 2'
   workflow_call:
-    inputs:
-      os:
-        required: true
-        type: string
   workflow_dispatch:
-    inputs:
-      os:
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -42,7 +34,7 @@ jobs:
             persist-credentials: false
 
         - name: Test preview build source distribution from PyPI
-          if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+          if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'workflow_call')
           run: |
             python -m pip uninstall -y onnx-weekly
             python -m pip install --upgrade pip
@@ -52,7 +44,7 @@ jobs:
             pytest
 
         - name: Test preview build source distribution from test.PyPI
-          if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+          if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'workflow_call')
           run: |
             python -m pip uninstall -y onnx-weekly
             python -m pip install setuptools
