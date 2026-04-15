@@ -109,13 +109,14 @@ jobs:
     if: |
       (!contains(join(needs.*.result, ' '), 'skipped')) &&
       (
+        github.event_name == 'pull_request' ||
         github.event.inputs.publish_pypi_release == 'yes' ||
         github.event.inputs.publish_testpypi_release == 'yes' ||
         github.event.inputs.generate_sbom == 'yes'
       )
     uses: ./.github/workflows/generate_sbom.yml
     with:
-      subject_name: 'onnx'
+      subject_name: ${{ (github.event_name == 'pull_request' || github.event.inputs.build_mode == 'preview') && 'onnx-weekly' || 'onnx' }}
       subject_version: ''
 
   check_for_publish_release_build_to_pypi:

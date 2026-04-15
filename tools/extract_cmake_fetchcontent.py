@@ -11,6 +11,10 @@ declarations.
 Can optionally merge the extracted components into an existing CycloneDX
 JSON produced by another tool (e.g. cyclonedx-py environment).
 
+This script captures build-time provenance for dependencies fetched during
+compilation. It does not imply that these components are runtime dependencies
+of the installed wheel.
+
 Usage:
     # Standalone cmake-only BOM
     python tools/extract_cmake_fetchcontent.py --output cmake-deps.cdx.json

@@ -14,6 +14,9 @@
 #                            plus C++ libraries fetched by CMake FetchContent
 #                            (protobuf, nanobind, absl). CycloneDX lifecycle: build
 #
+# The FetchContent components are build-time provenance only. They are not
+# runtime wheel dependencies unless they are explicitly shipped in the wheel.
+#
 # Both SBOMs are generated from requirements files (not from a resolved
 # environment) because transitive resolution is environment-dependent and
 # cannot be canonically represented at build time.
@@ -25,8 +28,9 @@
 # Called from create_release.yml after all wheels and sdist are built,
 # with subject_name (onnx or onnx-weekly) and subject_version passed as inputs.
 # Also runs on pull_request so every push to a PR branch regenerates SBOMs.
-# When triggered by workflow_dispatch or pull_request without inputs, the name
-# defaults to "onnx" and the version is read from the VERSION_NUMBER file.
+# When triggered by workflow_dispatch without inputs, the name defaults to
+# "onnx". When triggered by pull_request without inputs, the name defaults to
+# "onnx-weekly". The version is read from the VERSION_NUMBER file.
 
 name: Generate SBOM
 on:
@@ -76,10 +80,17 @@ jobs:
     - name: Resolve subject name and version
       id: resolve
       env:
+        EVENT_NAME: ${{ github.event_name }}
         INPUT_NAME: ${{ inputs.subject_name }}
         INPUT_VERSION: ${{ inputs.subject_version }}
       run: |
-        NAME="${INPUT_NAME:-onnx}"
+        if [ -n "${INPUT_NAME}" ]; then
+          NAME="${INPUT_NAME}"
+        elif [ "${EVENT_NAME}" = "pull_request" ]; then
+          NAME="onnx-weekly"
+        else
+          NAME="onnx"
+        fi
         VERSION="${INPUT_VERSION:-$(cat VERSION_NUMBER)}"
         echo "name=$NAME" >> "$GITHUB_OUTPUT"
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -108,6 +119,7 @@ jobs:
       # Scans declared direct deps only — not a resolved environment.
       # requirements-reference.txt (Pillow, ruamel.yaml) provides the optional
       # extras shipped with the reference implementation.
+      # Build-only CMake FetchContent components are intentionally excluded.
       run: |
         cat requirements.txt requirements-reference.txt > /tmp/runtime-requirements.txt
         cyclonedx-py requirements /tmp/runtime-requirements.txt \
@@ -174,6 +186,7 @@ jobs:
     - name: Extract CMake FetchContent dependencies and merge
       # Appends protobuf and nanobind (fetched by CMake at wheel-build time)
       # into the Python build-deps BOM and sets lifecycle: build.
+      # These entries capture compilation provenance and are not runtime deps.
       env:
         SUBJECT_NAME: ${{ needs.setup.outputs.subject_name }}
         SUBJECT_VERSION: ${{ needs.setup.outputs.subject_version }}
