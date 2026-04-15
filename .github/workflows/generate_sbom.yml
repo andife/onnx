@@ -24,13 +24,13 @@
 #
 # Called from create_release.yml after all wheels and sdist are built,
 # with subject_name (onnx or onnx-weekly) and subject_version passed as inputs.
-# Also runs on push for testing.
-# When triggered by workflow_dispatch or push without inputs, the name defaults
-# to "onnx" and the version is read from the VERSION_NUMBER file.
+# Also runs on pull_request so every push to a PR branch regenerates SBOMs.
+# When triggered by workflow_dispatch or pull_request without inputs, the name
+# defaults to "onnx" and the version is read from the VERSION_NUMBER file.
 
 name: Generate SBOM
 on:
-  push:
+  pull_request:
   workflow_call:
     inputs:
       subject_name:
