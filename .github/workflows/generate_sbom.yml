@@ -326,8 +326,8 @@ jobs:
 
         wheel_files = sorted(wheels_dir.glob("*.whl"))
         if not wheel_files:
-            print("No wheel artifacts found. Skipping wheel SBOM embedding for this run.")
-            raise SystemExit(0)
+            print("ERROR: No wheel artifacts found. SBOM embedding failed.")
+            raise SystemExit(1)
 
         for wheel_file in wheel_files:
             with tempfile.TemporaryDirectory(prefix="wheel-sbom-") as tmp:
