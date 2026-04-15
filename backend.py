@@ -20,11 +20,13 @@ import subprocess
 import textwrap
 
 from setuptools.build_meta import (
-    build_editable,
     build_wheel,
     get_requires_for_build_sdist,
     prepare_metadata_for_build_editable,
     prepare_metadata_for_build_wheel,
+)
+from setuptools.build_meta import (
+    build_editable as _build_editable,
 )
 from setuptools.build_meta import (
     build_sdist as _build_sdist,

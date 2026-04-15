@@ -9,8 +9,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-# Add the project root to the path so we can import backend
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+# Add the project root to sys.path so we can import backend.py (project root module)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 import backend
 
@@ -77,15 +77,13 @@ class TestBackendBuild(unittest.TestCase):
 
     def test_ensure_version_file(self):
         """Test _ensure_version_file creates version.py in correct location."""
-        # This should create onnx/version.py in the project root
+        # This should create (or overwrite) onnx/version.py in the project root.
+        # Do NOT delete the file afterwards — it is a required build artifact and
+        # deleting it races with parallel pytest workers that import onnx.
         backend._ensure_version_file()
 
         version_file = os.path.join(os.path.dirname(__file__), "..", "version.py")
         self.assertTrue(os.path.exists(version_file))
-
-        # Clean up
-        if os.path.exists(version_file):
-            os.remove(version_file)
 
     def test_backend_import_safe(self):
         """Test that importing backend doesn't execute setup.py."""
