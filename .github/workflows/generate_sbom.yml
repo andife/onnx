@@ -281,6 +281,10 @@ jobs:
   embed-sbom-into-wheels:
     name: Embed SBOM into wheels
     needs: [runtime-sbom, build-sbom, validate]
+    # Only embed when called via workflow_call from create_release.yml
+    # (which has already built and uploaded wheels).
+    # On pull_request, wheels don't exist yet, so skip this job.
+    if: github.event_name == 'workflow_call'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -292,7 +296,6 @@ jobs:
         pattern: wheels-*
         path: wheels
         merge-multiple: true
-        if-no-files-found: ignore
 
     - name: Download SBOM artifacts
       uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
@@ -326,8 +329,8 @@ jobs:
 
         wheel_files = sorted(wheels_dir.glob("*.whl"))
         if not wheel_files:
-            print("ERROR: No wheel artifacts found. SBOM embedding failed.")
-            raise SystemExit(1)
+            print("No wheel artifacts found. Skipping wheel SBOM embedding for this run.")
+            raise SystemExit(0)
 
         for wheel_file in wheel_files:
             with tempfile.TemporaryDirectory(prefix="wheel-sbom-") as tmp:
