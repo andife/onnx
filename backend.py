@@ -20,22 +20,14 @@ import subprocess
 import textwrap
 
 from setuptools.build_meta import (
+    build_editable as _build_editable,
+    build_sdist as _build_sdist,
     build_wheel,
+    get_requires_for_build_editable as _get_requires_for_build_editable,
     get_requires_for_build_sdist,
+    get_requires_for_build_wheel as _get_requires_for_build_wheel,
     prepare_metadata_for_build_editable,
     prepare_metadata_for_build_wheel,
-)
-from setuptools.build_meta import (
-    build_editable as _build_editable,
-)
-from setuptools.build_meta import (
-    build_sdist as _build_sdist,
-)
-from setuptools.build_meta import (
-    get_requires_for_build_editable as _get_requires_for_build_editable,
-)
-from setuptools.build_meta import (
-    get_requires_for_build_wheel as _get_requires_for_build_wheel,
 )
 
 __all__ = [
@@ -63,7 +55,9 @@ def _get_version_info():
     except (OSError, subprocess.CalledProcessError):
         git_version = ""
 
-    with open(os.path.join(top_dir, "VERSION_NUMBER"), encoding="utf-8") as version_file:
+    with open(
+        os.path.join(top_dir, "VERSION_NUMBER"), encoding="utf-8"
+    ) as version_file:
         version = version_file.read().strip()
 
     onnx_preview_build = os.getenv("ONNX_PREVIEW_BUILD") == "1"
@@ -111,6 +105,18 @@ def get_requires_for_build_editable(*args, **kwargs) -> list[str]:
 
 def get_requires_for_build_wheel(*args, **kwargs) -> list[str]:
     return _get_requires_for_build_wheel(*args, **kwargs) + _get_cmake_dep()
+
+
+def build_editable(
+    wheel_directory: str, config_settings=None, metadata_directory=None
+) -> str:
+    """Override build_editable to ensure version.py is created first."""
+    _ensure_version_file()
+    return _build_editable(
+        wheel_directory,
+        config_settings=config_settings,
+        metadata_directory=metadata_directory,
+    )
 
 
 def build_sdist(sdist_directory: str, config_settings=None) -> str:
