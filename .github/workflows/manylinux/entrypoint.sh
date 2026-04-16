@@ -50,6 +50,10 @@ export CMAKE_ARGS="-DONNX_USE_LITE_PROTO=ON -DONNX_HARDENING=ON"
 
 $PIP_INSTALL_COMMAND -v -r requirements-release_build.txt || { echo "Installing Python requirements failed."; exit 1; }
 
+# cyclonedx-bom is optional: embeds CycloneDX SBOMs into wheels when present.
+# --only-binary :all: prevents source compilation so free-threaded builds are not blocked.
+$PIP_INSTALL_COMMAND --only-binary :all: cyclonedx-bom || echo "cyclonedx-bom not available; wheels will be built without embedded SBOMs"
+
 if [[ "$BUILD_MODE" != "release" ]]; then
     echo "Building preview wheels..."
     sed -i 's/name = "onnx"/name = "onnx-weekly"/' 'pyproject.toml'
