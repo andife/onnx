@@ -6,9 +6,14 @@
 # Set the environment variable `ONNX_PREVIEW_BUILD=1` to build the dev preview release.
 from __future__ import annotations
 
+import base64
 import contextlib
+import csv
 import datetime
 import glob
+import hashlib
+import io
+import json
 import logging
 import multiprocessing
 import os
@@ -18,8 +23,15 @@ import shutil
 import subprocess
 import sys
 import sysconfig
+import tempfile
 import textwrap
+import zipfile
 from typing import ClassVar
+
+try:
+    from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
+except ImportError:
+    _bdist_wheel = None
 
 import setuptools
 import setuptools.command.build_ext
@@ -315,12 +327,228 @@ class BuildExt(setuptools.command.build_ext.build_ext):
             self.copy_file(src, dst)
 
 
+def _inject_sboms_into_wheel(wheel_path: str, sbom_dir: str) -> None:
+    """Rewrite a wheel to add CycloneDX SBOMs into its dist-info/sboms/ directory.
+
+    The RECORD file is updated with the correct hashes so pip can verify the
+    wheel normally.  The original wheel file is replaced atomically.
+    """
+    sbom_files = sorted(glob.glob(os.path.join(sbom_dir, "*.cdx.json")))
+    if not sbom_files:
+        return
+
+    # Derive dist-info prefix from wheel filename
+    # Format: {name}-{version}-{python}-{abi}-{platform}.whl
+    wheel_basename = os.path.basename(wheel_path)
+    name_part, version_part = wheel_basename.split("-")[:2]
+    dist_info_prefix = f"{name_part}-{version_part}.dist-info"
+    record_arcname = f"{dist_info_prefix}/RECORD"
+
+    tmp_path = wheel_path + ".tmp"
+    try:
+        with zipfile.ZipFile(wheel_path, "r") as src_zf:
+            all_infos = src_zf.infolist()
+            record_bytes = src_zf.read(record_arcname)
+
+        # Parse RECORD, dropping the self-referential row for RECORD itself
+        record_rows = [
+            row
+            for row in csv.reader(io.StringIO(record_bytes.decode("utf-8")))
+            if row and row[0] != record_arcname
+        ]
+
+        # Prepare SBOM data and compute RECORD entries for them
+        sbom_entries: list[tuple[str, bytes]] = []
+        for sbom_path in sbom_files:
+            with open(sbom_path, "rb") as f:
+                data = f.read()
+            digest = (
+                base64.urlsafe_b64encode(hashlib.sha256(data).digest())
+                .rstrip(b"=")
+                .decode()
+            )
+            arcname = f"{dist_info_prefix}/sboms/{os.path.basename(sbom_path)}"
+            record_rows.append([arcname, f"sha256={digest}", str(len(data))])
+            sbom_entries.append((arcname, data))
+
+        # Build updated RECORD content (RECORD entry itself always has empty hash/size)
+        record_buf = io.StringIO()
+        csv.writer(record_buf, lineterminator="\n").writerows(record_rows)
+        record_buf.write(f"{record_arcname},,\n")
+        record_content = record_buf.getvalue().encode("utf-8")
+
+        # Rewrite the wheel with the additional SBOM files and updated RECORD
+        with zipfile.ZipFile(wheel_path, "r") as src_zf:
+            with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as dst_zf:
+                for info in all_infos:
+                    if info.filename == record_arcname:
+                        continue
+                    dst_zf.writestr(info, src_zf.read(info.filename))
+                for arcname, data in sbom_entries:
+                    dst_zf.writestr(arcname, data)
+                dst_zf.writestr(record_arcname, record_content)
+
+        shutil.move(tmp_path, wheel_path)
+        logging.info("Embedded SBOMs into %s", wheel_basename)  # noqa: LOG015
+
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
+
+if _bdist_wheel is not None:
+
+    class BdistWheelWithSBOM(_bdist_wheel):  # type: ignore[misc,valid-type]
+        """bdist_wheel subclass that embeds CycloneDX SBOMs into the dist-info directory.
+
+        Requires cyclonedx-py (from the cyclonedx-bom package) to be installed.
+        When it is absent or SBOM generation fails for any reason the wheel is
+        built normally without SBOMs, so the build is never blocked.
+        """
+
+        def run(self) -> None:
+            existing = set(glob.glob(os.path.join(self.dist_dir, "*.whl")))
+            sbom_dir = self._try_generate_sboms()
+            super().run()
+            if sbom_dir is not None:
+                try:
+                    new_wheels = (
+                        set(glob.glob(os.path.join(self.dist_dir, "*.whl"))) - existing
+                    )
+                    for wheel_path in sorted(new_wheels):
+                        _inject_sboms_into_wheel(wheel_path, sbom_dir)
+                finally:
+                    shutil.rmtree(sbom_dir, ignore_errors=True)
+
+        def _try_generate_sboms(self) -> str | None:
+            """Return path to a temp dir containing generated SBOMs, or None on failure."""
+            tmp = tempfile.mkdtemp(prefix="onnx-sbom-")
+            try:
+                if self._generate_sboms(tmp):
+                    return tmp
+            except Exception as exc:
+                logging.warning(  # noqa: LOG015
+                    "SBOM generation failed (%s); wheel will be built without SBOMs",
+                    exc,
+                )
+            shutil.rmtree(tmp, ignore_errors=True)
+            return None
+
+        def _generate_sboms(self, tmp_dir: str) -> bool:
+            """Generate both CycloneDX SBOMs into tmp_dir.
+
+            Returns True on success, False when cyclonedx-py is not available.
+            """
+            # Locate the cyclonedx-py CLI; fall back to running it as a module
+            cyclonedx_exe = shutil.which("cyclonedx-py")
+            if cyclonedx_exe is not None:
+                cyclonedx_cmd: list[str] = [cyclonedx_exe]
+            else:
+                try:
+                    subprocess.check_call(  # noqa: S603
+                        [sys.executable, "-m", "cyclonedx", "--version"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    cyclonedx_cmd = [sys.executable, "-m", "cyclonedx"]
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    logging.info(  # noqa: LOG015
+                        "cyclonedx-py not found; wheel will be built without embedded SBOMs"
+                    )
+                    return False
+
+            subject_name = "onnx-weekly" if ONNX_PREVIEW_BUILD else "onnx"
+            subject_version = VERSION_INFO["version"]
+
+            # --- Runtime SBOM ---
+            # Merge requirements.txt + requirements-reference.txt into one file
+            merged_req = os.path.join(tmp_dir, "runtime-requirements.txt")
+            with open(merged_req, "w", encoding="utf-8") as fout:
+                for fname in ("requirements.txt", "requirements-reference.txt"):
+                    req_path = os.path.join(TOP_DIR, fname)
+                    if os.path.exists(req_path):
+                        with open(req_path, encoding="utf-8") as fin:
+                            fout.write(fin.read())
+
+            runtime_sbom = os.path.join(tmp_dir, "onnx-runtime.cdx.json")
+            subprocess.check_call(  # noqa: S603
+                [
+                    *cyclonedx_cmd,
+                    "requirements",
+                    merged_req,
+                    "--output-format",
+                    "JSON",
+                    "--output-file",
+                    runtime_sbom,
+                ],
+            )
+
+            # Annotate with lifecycle phase and subject component
+            with open(runtime_sbom, encoding="utf-8") as f:
+                bom = json.load(f)
+            meta = bom.setdefault("metadata", {})
+            meta["lifecycles"] = [{"phase": "operations"}]
+            meta["authors"] = [{"name": "ONNX Project Contributors"}]
+            meta["supplier"] = {
+                "name": "Linux Foundation",
+                "url": ["https://www.linuxfoundation.org"],
+            }
+            meta["component"] = {
+                "type": "library",
+                "name": subject_name,
+                "version": subject_version,
+                "purl": f"pkg:pypi/{subject_name}@{subject_version}",
+            }
+            with open(runtime_sbom, "w", encoding="utf-8") as f:
+                json.dump(bom, f, indent=2)
+
+            # --- Build SBOM ---
+            # Start from Python build deps, then merge CMake FetchContent entries
+            build_python_sbom = os.path.join(tmp_dir, "build-python.cdx.json")
+            subprocess.check_call(  # noqa: S603
+                [
+                    *cyclonedx_cmd,
+                    "requirements",
+                    os.path.join(TOP_DIR, "requirements-release_build.txt"),
+                    "--output-format",
+                    "JSON",
+                    "--output-file",
+                    build_python_sbom,
+                ],
+            )
+
+            build_sbom = os.path.join(tmp_dir, "onnx-build.cdx.json")
+            subprocess.check_call(  # noqa: S603
+                [
+                    sys.executable,
+                    os.path.join(TOP_DIR, "tools", "extract_cmake_fetchcontent.py"),
+                    "--cmake",
+                    os.path.join(TOP_DIR, "CMakeLists.txt"),
+                    "--merge-into",
+                    build_python_sbom,
+                    "--lifecycle",
+                    "build",
+                    "--subject-name",
+                    subject_name,
+                    "--subject-version",
+                    subject_version,
+                    "--output",
+                    build_sbom,
+                ],
+            )
+
+            return True
+
+
 CMD_CLASS = {
     "cmake_build": CmakeBuild,
     "build_py": BuildPy,
     "build_ext": BuildExt,
     "develop": Develop,
 }
+if _bdist_wheel is not None:
+    CMD_CLASS["bdist_wheel"] = BdistWheelWithSBOM
 
 ################################################################################
 # Extensions
