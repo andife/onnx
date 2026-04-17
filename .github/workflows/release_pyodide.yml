@@ -5,7 +5,6 @@
 name: PyodideRelease
 
 on:
-  push:
   workflow_call:
     inputs:
       os:
