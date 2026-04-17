@@ -1,0 +1,216 @@
+# Copyright (c) ONNX Project Contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: PyodideRelease
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+      build_mode:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.event_name != 'pull_request' || startsWith(github.base_ref, 'rel-') || contains(github.event.pull_request.labels.*.name, 'run release CIs')
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          submodules: true
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install -q --upgrade pip
+          python -m pip install -q -r requirements-release_build.txt
+          python -m pip install -q pyodide-build
+
+      - name: Get Pyodide emscripten version
+        id: pyodide-config
+        run: |
+          pyodide config get emscripten_version | sed 's/^/emscripten_version=/' >> "$GITHUB_OUTPUT"
+
+      - name: Cache emsdk
+        id: cache-emsdk
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: emsdk
+          key: emsdk-${{ steps.pyodide-config.outputs.emscripten_version }}
+
+      - name: Install emscripten
+        if: steps.cache-emsdk.outputs.cache-hit != 'true'
+        env:
+          EMSCRIPTEN_VERSION: ${{ steps.pyodide-config.outputs.emscripten_version }}
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git emsdk
+          cd emsdk
+          ./emsdk install "$EMSCRIPTEN_VERSION"
+          ./emsdk activate "$EMSCRIPTEN_VERSION"
+
+      - name: Export emscripten environment
+        run: |
+          echo "EMSDK=$PWD/emsdk" >> "$GITHUB_ENV"
+          echo "$PWD/emsdk" >> "$GITHUB_PATH"
+          echo "$PWD/emsdk/upstream/emscripten" >> "$GITHUB_PATH"
+
+      - name: Determine protobuf version
+        id: protobuf-version
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          from pathlib import Path
+          import re
+
+          requirements = Path("requirements-release_build.txt").read_text(encoding="utf-8")
+          match = re.search(r"^protobuf==([0-9.]+)", requirements, re.MULTILINE)
+          if not match:
+              pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+              match = re.search(r'protobuf>=([0-9.]+)', pyproject)
+          if not match:
+              raise SystemExit("Unable to determine protobuf version")
+          print(f"version={match.group(1)}")
+          PY
+
+      - name: Cache protobuf-wasm
+        id: cache-protobuf-wasm
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: protobuf-wasm
+          key: protobuf-wasm-${{ steps.pyodide-config.outputs.emscripten_version }}-${{ steps.protobuf-version.outputs.version }}
+
+      - name: Build protobuf for wasm
+        if: steps.cache-protobuf-wasm.outputs.cache-hit != 'true'
+        env:
+          PROTOBUF_VERSION: ${{ steps.protobuf-version.outputs.version }}
+        run: |
+          source emsdk/emsdk_env.sh > /dev/null
+          git clone --depth 1 --branch "v$PROTOBUF_VERSION" https://github.com/protocolbuffers/protobuf.git protobuf-wasm
+          git -C protobuf-wasm submodule update --init --recursive
+          cmake -S protobuf-wasm -B protobuf-wasm/build_source \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -Dprotobuf_ABSL_PROVIDER=module \
+            -Dprotobuf_BUILD_PROTOC_BINARIES=OFF \
+            -Dprotobuf_BUILD_SHARED_LIBS=OFF \
+            -Dprotobuf_BUILD_TESTS=OFF \
+            -Dprotobuf_WITH_ZLIB=OFF \
+            -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+          cmake --build protobuf-wasm/build_source --parallel "$(nproc)"
+
+      - name: Build host protoc
+        run: |
+          source workflow_scripts/protobuf/build_protobuf_unix.sh "$(nproc)" "$PWD/protobuf-host"
+          echo "$PWD/protobuf-host/bin" >> "$GITHUB_PATH"
+
+      - name: Configure preview build
+        if: ${{ inputs.build_mode != 'release' }}
+        run: |
+          sed -i 's/name = "onnx"/name = "onnx-weekly"/' pyproject.toml
+          echo "ONNX_PREVIEW_BUILD=1" >> "$GITHUB_ENV"
+
+      - name: Build Pyodide wheel
+        env:
+          ONNX_ML: 1
+          CMAKE_ARGS: >-
+            -DONNX_USE_PROTOBUF_SHARED_LIBS=OFF
+            -DONNX_USE_LITE_PROTO=ON
+            -DONNX_PROTOC_EXECUTABLE=${{ github.workspace }}/protobuf-host/bin/protoc
+            -DProtobuf_PROTOC_EXECUTABLE=${{ github.workspace }}/protobuf-host/bin/protoc
+            -DProtobuf_INCLUDE_DIR=${{ github.workspace }}/protobuf-wasm/src
+            -DProtobuf_LITE_LIBRARY=${{ github.workspace }}/protobuf-wasm/build_source/libprotobuf-lite.a
+        run: |
+          source emsdk/emsdk_env.sh > /dev/null
+          pyodide build --exports whole_archive
+
+      - name: Remove test data from wheel
+        run: |
+          wheel_file="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          if [ -z "$wheel_file" ]; then
+            echo "Wheel file not found"
+            exit 1
+          fi
+          zip --delete "$wheel_file" 'onnx/backend/test/data/*' || true
+
+      - name: Validate wheel contents
+        env:
+          BUILD_MODE: ${{ inputs.build_mode }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import zipfile
+
+          wheels = sorted(Path("dist").glob("*.whl"))
+          if len(wheels) != 1:
+              raise SystemExit(f"Expected exactly one wheel, found {len(wheels)}")
+
+          wheel = wheels[0]
+          with zipfile.ZipFile(wheel) as archive:
+              bad_file = archive.testzip()
+              if bad_file is not None:
+                  raise SystemExit(f"Corrupt wheel member: {bad_file}")
+              names = archive.namelist()
+              if any(name.startswith("onnx/backend/test/data/") for name in names):
+                  raise SystemExit("Wheel still contains backend test data")
+              metadata_name = next(name for name in names if name.endswith(".dist-info/METADATA"))
+              metadata = archive.read(metadata_name).decode("utf-8")
+              if "Name: onnx-weekly" in metadata:
+                  found_name = "onnx-weekly"
+              elif "Name: onnx" in metadata:
+                  found_name = "onnx"
+              else:
+                  raise SystemExit("Wheel metadata does not contain package name")
+
+          build_mode = os.environ["BUILD_MODE"]
+          expected_name = "onnx" if build_mode == "release" else "onnx-weekly"
+          if found_name != expected_name:
+              raise SystemExit(f"Expected package name {expected_name}, found {found_name}")
+          PY
+
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: wheels-${{ inputs.os }}
+          path: dist/*.whl
+
+  test:
+    needs: build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wheels-${{ inputs.os }}
+          path: dist
+
+      - name: Validate downloaded wheel
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          wheels = sorted(Path("dist").glob("*.whl"))
+          if len(wheels) != 1:
+              raise SystemExit(f"Expected exactly one wheel, found {len(wheels)}")
+
+          with zipfile.ZipFile(wheels[0]) as archive:
+              if archive.testzip() is not None:
+                  raise SystemExit("Downloaded wheel failed zip validation")
+          PY
