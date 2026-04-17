@@ -143,13 +143,57 @@ jobs:
 
       - name: Remove test data from wheel
         run: |
-          wheel_file="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
-          if [ -z "$wheel_file" ]; then
-            echo "Wheel file not found"
-            exit 1
-          fi
-          zip --delete "$wheel_file" 'onnx/backend/test/data/*' || true
+          python - <<'PY'
+          import base64
+          import csv
+          import hashlib
+          import os
+          from pathlib import Path
+          import shutil
+          import tempfile
+          import zipfile
 
+          wheels = sorted(Path("dist").glob("*.whl"))
+          if len(wheels) != 1:
+              raise SystemExit(f"Expected exactly one wheel, found {len(wheels)}")
+
+          wheel_path = wheels[0]
+
+          with tempfile.TemporaryDirectory() as td:
+              root = Path(td) / "wheel"
+              with zipfile.ZipFile(wheel_path) as archive:
+                  archive.extractall(root)
+
+              test_data_root = root / "onnx" / "backend" / "test" / "data"
+              if test_data_root.exists():
+                  shutil.rmtree(test_data_root)
+
+              dist_info_dirs = list(root.glob("*.dist-info"))
+              if len(dist_info_dirs) != 1:
+                  raise SystemExit(
+                      f"Expected exactly one .dist-info directory, found {len(dist_info_dirs)}"
+                  )
+
+              dist_info_dir = dist_info_dirs[0]
+              record_path = dist_info_dir / "RECORD"
+
+              rows = []
+              for path in sorted(p for p in root.rglob("*") if p.is_file() and p != record_path):
+                  relpath = path.relative_to(root).as_posix()
+                  data = path.read_bytes()
+                  digest = hashlib.sha256(data).digest()
+                  encoded_digest = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+                  rows.append((relpath, f"sha256={encoded_digest}", str(len(data))))
+
+              rows.append((record_path.relative_to(root).as_posix(), "", ""))
+              with record_path.open("w", encoding="utf-8", newline="") as record_file:
+                  writer = csv.writer(record_file, lineterminator="\n")
+                  writer.writerows(rows)
+
+              with zipfile.ZipFile(wheel_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                  for path in sorted(p for p in root.rglob("*") if p.is_file()):
+                      archive.write(path, path.relative_to(root).as_posix())
+          PY
       - name: Validate wheel contents
         env:
           BUILD_MODE: ${{ env.BUILD_MODE }}
