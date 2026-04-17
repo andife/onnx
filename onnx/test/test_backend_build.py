@@ -9,10 +9,13 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import pytest
+
 # Add the project root to sys.path so we can import backend.py (project root module)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-import backend
+setuptools = pytest.importorskip("setuptools", reason="setuptools not available")
+import backend  # noqa: E402
 
 
 class TestBackendBuild(unittest.TestCase):
