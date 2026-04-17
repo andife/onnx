@@ -5,6 +5,7 @@
 name: PyodideRelease
 
 on:
+  push:
   workflow_call:
     inputs:
       os:
@@ -21,6 +22,9 @@ jobs:
   build:
     if: github.event_name != 'pull_request' || startsWith(github.base_ref, 'rel-') || contains(github.event.pull_request.labels.*.name, 'run release CIs')
     runs-on: ubuntu-24.04
+    env:
+      BUILD_MODE: ${{ inputs.build_mode || github.event.inputs.build_mode || 'preview' }}
+      OS_NAME: ${{ inputs.os || 'pyodide' }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -116,7 +120,7 @@ jobs:
           echo "$PWD/protobuf-host/bin" >> "$GITHUB_PATH"
 
       - name: Configure preview build
-        if: ${{ inputs.build_mode != 'release' }}
+        if: ${{ env.BUILD_MODE != 'release' }}
         run: |
           sed -i 's/name = "onnx"/name = "onnx-weekly"/' pyproject.toml
           echo "ONNX_PREVIEW_BUILD=1" >> "$GITHUB_ENV"
@@ -146,7 +150,7 @@ jobs:
 
       - name: Validate wheel contents
         env:
-          BUILD_MODE: ${{ inputs.build_mode }}
+          BUILD_MODE: ${{ env.BUILD_MODE }}
         run: |
           python - <<'PY'
           import os
@@ -182,12 +186,14 @@ jobs:
 
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: wheels-${{ inputs.os }}
+          name: wheels-${{ env.OS_NAME }}
           path: dist/*.whl
 
   test:
     needs: build
     runs-on: ubuntu-24.04
+    env:
+      OS_NAME: ${{ inputs.os || 'pyodide' }}
 
     steps:
       - name: Set up Python 3.12
@@ -197,7 +203,7 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: wheels-${{ inputs.os }}
+          name: wheels-${{ env.OS_NAME }}
           path: dist
 
       - name: Validate downloaded wheel
