@@ -90,16 +90,5 @@ class TestBackendBuild(unittest.TestCase):
         version_file = os.path.join(os.path.dirname(__file__), "..", "version.py")
         self.assertTrue(os.path.exists(version_file))
 
-    def test_backend_import_safe(self):
-        """Test that importing backend doesn't execute setup.py."""
-        # This test ensures that our fix prevents setup.py from being executed
-        # during import. If setup.py were executed, it would likely cause issues
-        # or at least be detectable.
-
-        # Import should succeed without issues (backend is already imported above)
-        # If we get here without errors, the import is safe
-        self.assertTrue(True)
-
-
 if __name__ == "__main__":
     unittest.main()
