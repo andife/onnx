@@ -21,12 +21,26 @@ import textwrap
 
 from setuptools.build_meta import (
     build_editable as _build_editable,
+)
+from setuptools.build_meta import (
     build_sdist as _build_sdist,
+)
+from setuptools.build_meta import (
     build_wheel as _build_wheel,
+)
+from setuptools.build_meta import (
     get_requires_for_build_editable as _get_requires_for_build_editable,
+)
+from setuptools.build_meta import (
     get_requires_for_build_sdist,
+)
+from setuptools.build_meta import (
     get_requires_for_build_wheel as _get_requires_for_build_wheel,
+)
+from setuptools.build_meta import (
     prepare_metadata_for_build_editable as _prepare_metadata_for_build_editable,
+)
+from setuptools.build_meta import (
     prepare_metadata_for_build_wheel as _prepare_metadata_for_build_wheel,
 )
 
@@ -107,14 +121,22 @@ def get_requires_for_build_wheel(*args, **kwargs) -> list[str]:
     return _get_requires_for_build_wheel(*args, **kwargs) + _get_cmake_dep()
 
 
-def prepare_metadata_for_build_wheel(metadata_directory: str, config_settings=None) -> str:
+def prepare_metadata_for_build_wheel(
+    metadata_directory: str, config_settings=None
+) -> str:
     _ensure_version_file()
-    return _prepare_metadata_for_build_wheel(metadata_directory, config_settings=config_settings)
+    return _prepare_metadata_for_build_wheel(
+        metadata_directory, config_settings=config_settings
+    )
 
 
-def prepare_metadata_for_build_editable(metadata_directory: str, config_settings=None) -> str:
+def prepare_metadata_for_build_editable(
+    metadata_directory: str, config_settings=None
+) -> str:
     _ensure_version_file()
-    return _prepare_metadata_for_build_editable(metadata_directory, config_settings=config_settings)
+    return _prepare_metadata_for_build_editable(
+        metadata_directory, config_settings=config_settings
+    )
 
 
 def build_wheel(
