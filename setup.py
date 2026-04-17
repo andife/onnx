@@ -69,13 +69,23 @@ try:
 except (OSError, subprocess.CalledProcessError):
     _git_version = ""
 
-with open(os.path.join(TOP_DIR, "VERSION_NUMBER"), encoding="utf-8") as version_file:
-    _version = version_file.read().strip()
+_version_py = os.path.join(TOP_DIR, "onnx", "version.py")
+if os.path.isfile(_version_py):
+    # Use the version baked by the build backend (e.g. from an sdist where
+    # ONNX_PREVIEW_BUILD was set at sdist-creation time but may not be set now).
+    _ns: dict = {}
+    with open(_version_py, encoding="utf-8") as _vf:
+        exec(compile(_vf.read(), _version_py, "exec"), _ns)  # noqa: S102
+    _version = _ns["version"]
+    _git_version = _ns.get("git_version", _git_version)
+else:
+    with open(os.path.join(TOP_DIR, "VERSION_NUMBER"), encoding="utf-8") as version_file:
+        _version = version_file.read().strip()
     if ONNX_PREVIEW_BUILD:
         # Create the preview build for weekly releases
         todays_date = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d")
         _version += ".dev" + todays_date
-    VERSION_INFO = {"version": _version, "git_version": _git_version}
+VERSION_INFO = {"version": _version, "git_version": _git_version}
 
 ################################################################################
 # Utilities
