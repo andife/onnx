@@ -21,27 +21,13 @@ import textwrap
 
 from setuptools.build_meta import (
     build_editable as _build_editable,
-)
-from setuptools.build_meta import (
     build_sdist as _build_sdist,
-)
-from setuptools.build_meta import (
     build_wheel as _build_wheel,
-)
-from setuptools.build_meta import (
-    get_requires_for_build_sdist,
-)
-from setuptools.build_meta import (
-    prepare_metadata_for_build_editable as _prepare_metadata_for_build_editable,
-)
-from setuptools.build_meta import (
-    prepare_metadata_for_build_wheel as _prepare_metadata_for_build_wheel,
-)
-from setuptools.build_meta import (
     get_requires_for_build_editable as _get_requires_for_build_editable,
-)
-from setuptools.build_meta import (
+    get_requires_for_build_sdist,
     get_requires_for_build_wheel as _get_requires_for_build_wheel,
+    prepare_metadata_for_build_editable as _prepare_metadata_for_build_editable,
+    prepare_metadata_for_build_wheel as _prepare_metadata_for_build_wheel,
 )
 
 __all__ = [
@@ -54,7 +40,6 @@ __all__ = [
     "prepare_metadata_for_build_editable",
     "prepare_metadata_for_build_wheel",
 ]
-
 
 
 def _get_version_info():

@@ -79,7 +79,9 @@ if os.path.isfile(_version_py):
     _version = _ns["version"]
     _git_version = _ns.get("git_version", _git_version)
 else:
-    with open(os.path.join(TOP_DIR, "VERSION_NUMBER"), encoding="utf-8") as version_file:
+    with open(
+        os.path.join(TOP_DIR, "VERSION_NUMBER"), encoding="utf-8"
+    ) as version_file:
         _version = version_file.read().strip()
     if ONNX_PREVIEW_BUILD:
         # Create the preview build for weekly releases
