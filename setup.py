@@ -369,6 +369,8 @@ def _inject_sboms_into_wheel(wheel_path: str, sbom_dir: str) -> None:
             arcname = f"{dist_info_prefix}/sboms/{os.path.basename(sbom_path)}"
             record_rows.append([arcname, f"sha256={digest}", str(len(data))])
             sbom_entries.append((arcname, data))
+            logging.info(  # noqa: LOG015
+                "SBOM to embed: %s (%d bytes)", os.path.basename(sbom_path), len(data))
 
         # Build updated RECORD content (RECORD entry itself always has empty hash/size)
         record_buf = io.StringIO()
