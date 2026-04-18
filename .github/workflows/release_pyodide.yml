@@ -40,6 +40,7 @@ jobs:
         run: |
           python -m pip install -q --upgrade pip
           python -m pip install -q -r requirements-release_build.txt
+          # pyodide-build 0.34.1 outputs a PEP 783-compatible wheel that can be uploaded to PyPI
           python -m pip install -q pyodide-build==0.34.1
 
       - name: Get Pyodide config
