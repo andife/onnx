@@ -43,33 +43,30 @@ jobs:
           python -m pip install -q -r requirements-release_build.txt
           python -m pip install -q pyodide-build
 
-      - name: Get Pyodide emscripten version
+      - name: Get Pyodide config
         id: pyodide-config
         run: |
           pyodide config get emscripten_version | sed 's/^/emscripten_version=/' >> "$GITHUB_OUTPUT"
+          pyodide config get emsdk_dir | sed 's/^/emsdk_dir=/' >> "$GITHUB_OUTPUT"
 
       - name: Cache emsdk
         id: cache-emsdk
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
-          path: emsdk
+          path: ${{ steps.pyodide-config.outputs.emsdk_dir }}
           key: emsdk-${{ steps.pyodide-config.outputs.emscripten_version }}
 
       - name: Install emscripten
         if: steps.cache-emsdk.outputs.cache-hit != 'true'
-        env:
-          EMSCRIPTEN_VERSION: ${{ steps.pyodide-config.outputs.emscripten_version }}
         run: |
-          git clone --depth 1 https://github.com/emscripten-core/emsdk.git emsdk
-          cd emsdk
-          ./emsdk install "$EMSCRIPTEN_VERSION"
-          ./emsdk activate "$EMSCRIPTEN_VERSION"
+          pyodide xbuildenv install-emscripten
 
       - name: Export emscripten environment
         run: |
-          echo "EMSDK=$PWD/emsdk" >> "$GITHUB_ENV"
-          echo "$PWD/emsdk" >> "$GITHUB_PATH"
-          echo "$PWD/emsdk/upstream/emscripten" >> "$GITHUB_PATH"
+          EMSDK_DIR="${{ steps.pyodide-config.outputs.emsdk_dir }}"
+          echo "EMSDK=$EMSDK_DIR" >> "$GITHUB_ENV"
+          echo "$EMSDK_DIR" >> "$GITHUB_PATH"
+          echo "$EMSDK_DIR/upstream/emscripten" >> "$GITHUB_PATH"
 
       - name: Determine protobuf version
         id: protobuf-version
@@ -100,7 +97,7 @@ jobs:
         env:
           PROTOBUF_VERSION: ${{ steps.protobuf-version.outputs.version }}
         run: |
-          source emsdk/emsdk_env.sh > /dev/null
+          source "$EMSDK/emsdk_env.sh" > /dev/null
           git clone --depth 1 --branch "v$PROTOBUF_VERSION" https://github.com/protocolbuffers/protobuf.git protobuf-wasm
           git -C protobuf-wasm submodule update --init --recursive
           cmake -S protobuf-wasm -B protobuf-wasm/build_source \
@@ -139,8 +136,8 @@ jobs:
             -DProtobuf_INCLUDE_DIR=${{ github.workspace }}/protobuf-wasm/src
             -DProtobuf_LITE_LIBRARY=${{ github.workspace }}/protobuf-wasm/build_source/libprotobuf-lite.a
         run: |
-          source emsdk/emsdk_env.sh > /dev/null
-          pyodide build --exports whole_archive
+          source "$EMSDK/emsdk_env.sh" > /dev/null
+          pyodide build
 
       - name: Remove test data from wheel
         run: |
