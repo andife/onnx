@@ -13,6 +13,7 @@ import datetime
 import glob
 import hashlib
 import io
+import json
 import logging
 import multiprocessing
 import os
@@ -326,6 +327,18 @@ class BuildExt(setuptools.command.build_ext.build_ext):
             self.copy_file(src, dst)
 
 
+def _annotate_sbom_occurrences(sbom_data: bytes, binary_paths: list[str]) -> bytes:
+    """Patch each component in the SBOM with evidence.occurrences listing the
+    compiled binary files inside the wheel that contain the bundled code."""
+    if not binary_paths:
+        return sbom_data
+    bom = json.loads(sbom_data.decode("utf-8"))
+    occurrences = [{"location": p} for p in sorted(binary_paths)]
+    for comp in bom.get("components", []):
+        comp["evidence"] = {"occurrences": occurrences}
+    return json.dumps(bom, indent=2).encode("utf-8")
+
+
 def _inject_sboms_into_wheel(wheel_path: str, sbom_dir: str) -> None:
     """Rewrite a wheel to add CycloneDX SBOMs into its dist-info/sboms/ directory.
 
@@ -349,6 +362,14 @@ def _inject_sboms_into_wheel(wheel_path: str, sbom_dir: str) -> None:
             all_infos = src_zf.infolist()
             record_bytes = src_zf.read(record_arcname)
 
+        # Discover compiled extension modules (.so / .pyd) present in the wheel.
+        # These are the files that physically contain the statically linked C++ code.
+        binary_paths = [
+            info.filename
+            for info in all_infos
+            if info.filename.endswith((".so", ".pyd"))
+        ]
+
         # Parse RECORD, dropping the self-referential row for RECORD itself
         record_rows = [
             row
@@ -361,6 +382,7 @@ def _inject_sboms_into_wheel(wheel_path: str, sbom_dir: str) -> None:
         for sbom_path in sbom_files:
             with open(sbom_path, "rb") as f:
                 data = f.read()
+            data = _annotate_sbom_occurrences(data, binary_paths)
             digest = (
                 base64.urlsafe_b64encode(hashlib.sha256(data).digest())
                 .rstrip(b"=")
@@ -459,6 +481,8 @@ if _bdist_wheel is not None:
                     os.path.join(TOP_DIR, "tools", "extract_cmake_fetchcontent.py"),
                     "--cmake",
                     os.path.join(TOP_DIR, "CMakeLists.txt"),
+                    "--lifecycle",
+                    "post-build",
                     "--subject-name",
                     subject_name,
                     "--subject-version",
