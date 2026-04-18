@@ -34,8 +34,10 @@ _merge_into = _mod._merge_into
 # Minimal CMake snippets that mirror the real CMakeLists.txt patterns.
 # ---------------------------------------------------------------------------
 
+# URL format mirrors the real abseil entry: .../releases/download/<ver>/name-<ver>.tar.gz
+# so the version is extracted from the /download/<ver>/ path segment, not the filename.
 _URL_CMAKE = """\
-set(AbseilURL https://github.com/abseil/abseil-cpp/archive/refs/tags/20240722.0.tar.gz)
+set(AbseilURL https://github.com/abseil/abseil-cpp/releases/download/20240722.0/abseil-cpp-20240722.0.tar.gz)
 set(AbseilSHA256 f50e5ac311a81382da7fa75b97310e4b9006474f9560ac46f54a9967f07d4ae3)
 FetchContent_Declare(
   absl
@@ -90,7 +92,9 @@ class TestResolve(unittest.TestCase):
         assert _resolve("${MISSING}", {}) == "${MISSING}"
 
     def test_mixed(self) -> None:
-        result = _resolve("https://example.com/${VERSION}/file.tar.gz", {"VERSION": "1.0"})
+        result = _resolve(
+            "https://example.com/${VERSION}/file.tar.gz", {"VERSION": "1.0"}
+        )
         assert result == "https://example.com/1.0/file.tar.gz"
 
 
@@ -164,12 +168,19 @@ class TestBuildComponent(unittest.TestCase):
         assert "version" in comp
         assert "20240722" in comp["version"]
 
+    def test_url_component_no_trailing_dot_in_version(self) -> None:
+        # Regression: greedy [\d.]* in the URL regex once pulled in the '.' from
+        # '.tar.gz', producing "20240722.0." instead of "20240722.0".
+        comp = self._component_from(_URL_CMAKE, "absl")
+        assert not comp["version"].endswith(".")
+
     def test_url_component_purl_github(self) -> None:
         comp = self._component_from(_URL_CMAKE, "absl")
         assert comp["purl"].startswith("pkg:github/abseil/")
 
     def test_url_component_purl_tag_consistent_with_version(self) -> None:
-        # When an explicit version variable exists, purl tag must match it.
+        # When an explicit version variable exists, the purl tag must match it
+        # so that comp["version"] and the purl tag are consistent.
         cmake = """\
 set(MyDep_VERSION 6.33.6)
 set(MyURL https://github.com/example/mydep/releases/download/v33.6/mydep-33.6.tar.gz)
@@ -183,7 +194,9 @@ FetchContent_Declare(
         entries = _parse_fetchcontent_declares(cmake, variables)
         comp = _build_component(entries[0], cmake)
         assert comp["version"] == "6.33.6"
-        assert comp["purl"].endswith("@v6.33.6"), f"purl tag must match version, got: {comp['purl']}"
+        assert comp["purl"].endswith("@v6.33.6"), (
+            f"purl tag must match version, got: {comp['purl']}"
+        )
 
     def test_url_component_hash(self) -> None:
         comp = self._component_from(_URL_CMAKE, "absl")
@@ -209,7 +222,9 @@ FetchContent_Declare(
 
     def test_git_component_external_ref_distribution(self) -> None:
         comp = self._component_from(_GIT_CMAKE, "nanobind")
-        dist_refs = [r for r in comp["externalReferences"] if r["type"] == "distribution"]
+        dist_refs = [
+            r for r in comp["externalReferences"] if r["type"] == "distribution"
+        ]
         assert len(dist_refs) == 1
         assert "v2.10.2" in dist_refs[0]["url"]
         assert dist_refs[0]["url"].endswith(".tar.gz")
@@ -279,7 +294,9 @@ class TestMakeBom(unittest.TestCase):
         assert self.bom["components"][0]["name"] == "nanobind"
 
     def test_manufacturer(self) -> None:
-        assert self.bom["metadata"]["manufacturer"]["name"] == "ONNX Project Contributors"
+        assert (
+            self.bom["metadata"]["manufacturer"]["name"] == "ONNX Project Contributors"
+        )
 
 
 class TestMergeInto(unittest.TestCase):
@@ -290,70 +307,44 @@ class TestMergeInto(unittest.TestCase):
             "serialNumber": "urn:uuid:00000000-0000-0000-0000-000000000001",
             "version": 1,
             "metadata": {},
-            "components": [{"type": "library", "name": "numpy", "bom-ref": "numpy@2.0.0"}],
+            "components": [
+                {"type": "library", "name": "numpy", "bom-ref": "numpy@2.0.0"}
+            ],
             "dependencies": [{"ref": "numpy@2.0.0"}],
         }
 
-    def test_components_appended(self) -> None:
+    def _new_comps(self) -> list:
         variables = _parse_cmake_variables(_GIT_CMAKE)
         entries = _parse_fetchcontent_declares(_GIT_CMAKE, variables)
-        new_comps = [_build_component(e, _GIT_CMAKE) for e in entries]
+        return [_build_component(e, _GIT_CMAKE) for e in entries]
 
+    def _merge(self, base: dict, new_comps: list) -> dict:
         with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
-            json.dump(self._make_base_bom(), f)
+            json.dump(base, f)
             tmp = Path(f.name)
-
         result = _merge_into(tmp, new_comps, "build")
         tmp.unlink()
+        return result
 
+    def test_components_appended(self) -> None:
+        result = self._merge(self._make_base_bom(), self._new_comps())
         names = [c["name"] for c in result["components"]]
         assert "numpy" in names
         assert "nanobind" in names
 
     def test_lifecycle_overwritten(self) -> None:
-        variables = _parse_cmake_variables(_GIT_CMAKE)
-        entries = _parse_fetchcontent_declares(_GIT_CMAKE, variables)
-        new_comps = [_build_component(e, _GIT_CMAKE) for e in entries]
-
-        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
-            json.dump(self._make_base_bom(), f)
-            tmp = Path(f.name)
-
-        result = _merge_into(tmp, new_comps, "build")
-        tmp.unlink()
-
+        result = self._merge(self._make_base_bom(), self._new_comps())
         assert result["metadata"]["lifecycles"] == [{"phase": "build"}]
 
     def test_dependencies_extended(self) -> None:
-        variables = _parse_cmake_variables(_GIT_CMAKE)
-        entries = _parse_fetchcontent_declares(_GIT_CMAKE, variables)
-        new_comps = [_build_component(e, _GIT_CMAKE) for e in entries]
-
-        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
-            json.dump(self._make_base_bom(), f)
-            tmp = Path(f.name)
-
-        result = _merge_into(tmp, new_comps, "build")
-        tmp.unlink()
-
+        result = self._merge(self._make_base_bom(), self._new_comps())
         refs = {d["ref"] for d in result["dependencies"]}
         assert "nanobind@2.10.2" in refs
 
     def test_no_duplicate_dependencies(self) -> None:
-        variables = _parse_cmake_variables(_GIT_CMAKE)
-        entries = _parse_fetchcontent_declares(_GIT_CMAKE, variables)
-        new_comps = [_build_component(e, _GIT_CMAKE) for e in entries]
-
         base = self._make_base_bom()
         base["dependencies"].append({"ref": "nanobind@2.10.2"})
-
-        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
-            json.dump(base, f)
-            tmp = Path(f.name)
-
-        result = _merge_into(tmp, new_comps, "build")
-        tmp.unlink()
-
+        result = self._merge(base, self._new_comps())
         refs = [d["ref"] for d in result["dependencies"]]
         assert refs.count("nanobind@2.10.2") == 1
 
@@ -383,13 +374,16 @@ class TestAgainstRealCMakeLists(unittest.TestCase):
         assert "nanobind" in self.by_name
 
     def test_abseil_cpp_license(self) -> None:
-        assert self.by_name["abseil-cpp"]["licenses"][0]["license"]["id"] == "Apache-2.0"
+        license_id = self.by_name["abseil-cpp"]["licenses"][0]["license"]["id"]
+        assert license_id == "Apache-2.0"
 
     def test_protobuf_license(self) -> None:
-        assert self.by_name["protobuf"]["licenses"][0]["license"]["id"] == "BSD-3-Clause"
+        license_id = self.by_name["protobuf"]["licenses"][0]["license"]["id"]
+        assert license_id == "BSD-3-Clause"
 
     def test_nanobind_license(self) -> None:
-        assert self.by_name["nanobind"]["licenses"][0]["license"]["id"] == "BSD-3-Clause"
+        license_id = self.by_name["nanobind"]["licenses"][0]["license"]["id"]
+        assert license_id == "BSD-3-Clause"
 
     def test_all_have_versions(self) -> None:
         for name, comp in self.by_name.items():
@@ -399,11 +393,16 @@ class TestAgainstRealCMakeLists(unittest.TestCase):
         for name, comp in self.by_name.items():
             assert "purl" in comp, f"{name} has no purl"
 
+    def test_no_version_has_trailing_dot(self) -> None:
+        for name, comp in self.by_name.items():
+            assert not comp.get("version", "").endswith("."), (
+                f"{name} version ends with dot: {comp['version']!r}"
+            )
+
     def test_purl_tag_matches_version(self) -> None:
         for name, comp in self.by_name.items():
             version = comp.get("version", "")
             purl = comp.get("purl", "")
-            # purl tag is the portion after '@'
             purl_tag = purl.split("@")[-1] if "@" in purl else ""
             assert purl_tag.lstrip("v") == version, (
                 f"{name}: purl tag '{purl_tag}' does not match version '{version}'"
@@ -422,7 +421,7 @@ class TestAgainstRealCMakeLists(unittest.TestCase):
         assert "distribution" in types
 
     def test_protobuf_version_matches_version_variable(self) -> None:
-        # CMakeLists.txt sets Protobuf_VERSION "6.33.6" after the FetchContent_Declare.
+        # CMakeLists.txt sets Protobuf_VERSION "6.33.6" after FetchContent_Declare.
         # The script must prefer that over the URL-embedded tag (v33.6).
         assert self.by_name["protobuf"]["version"] == "6.33.6"
         assert "@v6.33.6" in self.by_name["protobuf"]["purl"]

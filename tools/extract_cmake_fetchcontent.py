@@ -142,7 +142,8 @@ def _apply_url_fields(comp: dict[str, Any], entry: dict[str, str], text: str) ->
     version = _find_version_variable(text, entry["name"])
     if not version:
         v = re.search(r"[/-]v?(\d+\.\d+[\d.]*)", url)
-        version = v.group(1) if v else None
+        # Strip trailing dot that the greedy [\d.]* may pull in from ".tar.gz"
+        version = v.group(1).rstrip(".") if v else None
     if version:
         comp["version"] = version
 
