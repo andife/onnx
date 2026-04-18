@@ -382,12 +382,12 @@ def _inject_sboms_into_wheel(wheel_path: str, sbom_dir: str) -> None:
             zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as dst_zf,
         ):
             for info in all_infos:
-                    if info.filename == record_arcname:
-                        continue
-                    dst_zf.writestr(info, src_zf.read(info.filename))
-                for arcname, data in sbom_entries:
-                    dst_zf.writestr(arcname, data)
-                dst_zf.writestr(record_arcname, record_content)
+                if info.filename == record_arcname:
+                    continue
+                dst_zf.writestr(info, src_zf.read(info.filename))
+            for arcname, data in sbom_entries:
+                dst_zf.writestr(arcname, data)
+            dst_zf.writestr(record_arcname, record_content)
 
         shutil.move(tmp_path, wheel_path)
         logging.info("Embedded SBOMs into %s", wheel_basename)  # noqa: LOG015
