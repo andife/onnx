@@ -142,11 +142,14 @@ jobs:
         meta["supplier"] = {"name": "Linux Foundation", "url": ["https://www.linuxfoundation.org"]}
         name = os.environ["SUBJECT_NAME"]
         version = os.environ["SUBJECT_VERSION"]
+        root_ref = f"{name}@{version}"
         meta["component"] = {
             "type": "library",
             "name": name,
             "version": version,
+            "description": "Open Neural Network Exchange (ONNX) — open format for AI/ML models",
             "purl": f"pkg:pypi/{name}@{version}",
+            "bom-ref": root_ref,
         }
         Path("onnx-runtime.cdx.json").write_text(json.dumps(bom, indent=2))
 

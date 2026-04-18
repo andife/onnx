@@ -114,11 +114,18 @@ def _parse_fetchcontent_declares(
 # ---------------------------------------------------------------------------
 
 # SPDX license IDs for known FetchContent dependencies.
+# Keys are lowercased FetchContent names (as used in FetchContent_Declare).
 # Update this table when a new dependency is added to CMakeLists.txt.
 _KNOWN_LICENSES: dict[str, str] = {
     "absl": "Apache-2.0",
     "protobuf": "BSD-3-Clause",
     "nanobind": "BSD-3-Clause",
+}
+
+# Maps lowercased FetchContent names to their canonical package names.
+# FetchContent names are often short aliases; canonical names match upstream.
+_CANONICAL_NAMES: dict[str, str] = {
+    "absl": "abseil-cpp",
 }
 
 
@@ -142,9 +149,16 @@ def _apply_url_fields(comp: dict[str, Any], entry: dict[str, str], text: str) ->
     gh = _github_owner_repo(url)
     if gh:
         owner, repo = gh
-        tag_m = re.search(r"/download/(v?[^/]+)/", url)
-        tag = tag_m.group(1) if tag_m else version
-        comp["purl"] = f"pkg:github/{owner}/{repo}@{tag}"
+        # Prefer the explicit version variable (with v-prefix) over the URL tag so
+        # that comp["version"] and the purl tag are always consistent (e.g. protobuf
+        # uses tag v33.6 in the download URL but reports its version as 6.33.6).
+        if version:
+            tag = f"v{version}"
+        else:
+            tag_m = re.search(r"/download/(v?[^/]+)/", url)
+            tag = tag_m.group(1) if tag_m else None
+        if tag:
+            comp["purl"] = f"pkg:github/{owner}/{repo}@{tag}"
 
     comp["externalReferences"] = [{"type": "distribution", "url": url}]
 
@@ -173,24 +187,33 @@ def _apply_git_fields(comp: dict[str, Any], entry: dict[str, str]) -> None:
             f"pkg:github/{owner}/{repo}@{ref}" if ref else f"pkg:github/{owner}/{repo}"
         )
 
-    comp["externalReferences"] = [{"type": "vcs", "url": git_url}]
+    refs: list[dict[str, str]] = [{"type": "vcs", "url": git_url}]
+    # Add a point-in-time distribution URL so consumers have a verifiable artifact
+    # reference alongside the VCS pointer.
+    if gh and tag:
+        owner, repo = gh
+        dist_url = f"https://github.com/{owner}/{repo}/archive/refs/tags/{tag}.tar.gz"
+        refs.append({"type": "distribution", "url": dist_url})
+    comp["externalReferences"] = refs
 
 
 def _build_component(entry: dict[str, str], text: str) -> dict[str, Any]:
     """Convert one parsed FetchContent entry to a CycloneDX component."""
-    name = entry["name"].lower()
-    comp: dict[str, Any] = {"type": "library", "name": name}
+    fetch_name = entry["name"].lower()
+    canonical_name = _CANONICAL_NAMES.get(fetch_name, fetch_name)
+    comp: dict[str, Any] = {"type": "library", "name": canonical_name}
 
     if "url" in entry:
         _apply_url_fields(comp, entry, text)
     elif "git_url" in entry:
         _apply_git_fields(comp, entry)
 
-    spdx_id = _KNOWN_LICENSES.get(name)
+    # License and bom-ref use the canonical name; lookup keyed on FetchContent name.
+    spdx_id = _KNOWN_LICENSES.get(fetch_name)
     if spdx_id:
         comp["licenses"] = [{"license": {"id": spdx_id}}]
 
-    comp["bom-ref"] = f"{name}@{comp['version']}" if "version" in comp else name
+    comp["bom-ref"] = f"{canonical_name}@{comp['version']}" if "version" in comp else canonical_name
     return comp
 
 
@@ -322,12 +345,21 @@ def main() -> None:
 
     if args.subject_name and args.subject_version:
         name, version = args.subject_name, args.subject_version
+        root_ref = f"{name}@{version}"
         bom.setdefault("metadata", {})["component"] = {
             "type": "library",
             "name": name,
             "version": version,
+            "description": "Open Neural Network Exchange (ONNX) — open format for AI/ML models",
             "purl": f"pkg:pypi/{name}@{version}",
+            "bom-ref": root_ref,
         }
+        # Emit a dependency graph so consumers can see which C++ libraries the root
+        # component depends on.
+        component_refs = [c["bom-ref"] for c in components if "bom-ref" in c]
+        bom.setdefault("dependencies", []).insert(
+            0, {"ref": root_ref, "dependsOn": component_refs}
+        )
 
     out = Path(args.output).resolve()
     out.write_text(json.dumps(bom, indent=2), encoding="utf-8")
