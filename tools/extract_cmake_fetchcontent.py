@@ -208,7 +208,7 @@ def _make_bom(components: list[dict[str, Any]], lifecycle: str) -> dict[str, Any
         "metadata": {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "lifecycles": [{"phase": lifecycle}],
-            "authors": [{"name": "ONNX Project Contributors"}],
+            "manufacturer": {"name": "ONNX Project Contributors"},
             "supplier": {
                 "name": "Linux Foundation",
                 "url": ["https://www.linuxfoundation.org"],
@@ -238,7 +238,7 @@ def _merge_into(
     bom.setdefault("components", []).extend(new_components)
     meta = bom.setdefault("metadata", {})
     meta["lifecycles"] = [{"phase": lifecycle}]
-    meta["authors"] = [{"name": "ONNX Project Contributors"}]
+    meta["manufacturer"] = {"name": "ONNX Project Contributors"}
     meta["supplier"] = {
         "name": "Linux Foundation",
         "url": ["https://www.linuxfoundation.org"],

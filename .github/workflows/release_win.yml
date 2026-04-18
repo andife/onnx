@@ -65,11 +65,6 @@ jobs:
 
         python -m pip install -r requirements-release_build.txt
 
-        # cyclonedx-bom is optional: embeds CycloneDX SBOMs into wheels when present.
-        # --only-binary :all: prevents source compilation so free-threaded builds are not blocked.
-        python -m pip install --only-binary :all: cyclonedx-bom 2>&1 | Out-String | Write-Host
-        if ($LASTEXITCODE -ne 0) { Write-Host "cyclonedx-bom not available; wheels will be built without embedded SBOMs" }
-
         if ('${{ matrix.architecture }}' -eq 'x64') {
           python -m pip install cmake
         }

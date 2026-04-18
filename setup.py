@@ -13,7 +13,6 @@ import datetime
 import glob
 import hashlib
 import io
-import json
 import logging
 import multiprocessing
 import os
@@ -378,9 +377,11 @@ def _inject_sboms_into_wheel(wheel_path: str, sbom_dir: str) -> None:
         record_content = record_buf.getvalue().encode("utf-8")
 
         # Rewrite the wheel with the additional SBOM files and updated RECORD
-        with zipfile.ZipFile(wheel_path, "r") as src_zf:
-            with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as dst_zf:
-                for info in all_infos:
+        with (
+            zipfile.ZipFile(wheel_path, "r") as src_zf,
+            zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as dst_zf,
+        ):
+            for info in all_infos:
                     if info.filename == record_arcname:
                         continue
                     dst_zf.writestr(info, src_zf.read(info.filename))
@@ -400,11 +401,14 @@ def _inject_sboms_into_wheel(wheel_path: str, sbom_dir: str) -> None:
 if _bdist_wheel is not None:
 
     class BdistWheelWithSBOM(_bdist_wheel):  # type: ignore[misc,valid-type]
-        """bdist_wheel subclass that embeds CycloneDX SBOMs into the dist-info directory.
+        """bdist_wheel subclass that embeds a CycloneDX SBOM into the dist-info directory.
 
-        Requires cyclonedx-py (from the cyclonedx-bom package) to be installed.
-        When it is absent or SBOM generation fails for any reason the wheel is
-        built normally without SBOMs, so the build is never blocked.
+        The SBOM describes the C++ libraries (protobuf, abseil-cpp, nanobind)
+        that are compiled into onnx_cpp2py_export and bundled inside the wheel,
+        per PEP 770 / the dist-info/sboms/ specification.
+
+        If SBOM generation fails for any reason the wheel is built normally
+        without SBOMs, so the build is never blocked.
         """
 
         def run(self) -> None:
@@ -422,12 +426,12 @@ if _bdist_wheel is not None:
                     shutil.rmtree(sbom_dir, ignore_errors=True)
 
         def _try_generate_sboms(self) -> str | None:
-            """Return path to a temp dir containing generated SBOMs, or None on failure."""
+            """Return path to a temp dir containing the generated SBOM, or None on failure."""
             tmp = tempfile.mkdtemp(prefix="onnx-sbom-")
             try:
-                if self._generate_sboms(tmp):
-                    return tmp
-            except Exception as exc:
+                self._generate_sboms(tmp)
+                return tmp
+            except Exception as exc:  # noqa: BLE001 — any failure must not block the build
                 logging.warning(  # noqa: LOG015
                     "SBOM generation failed (%s); wheel will be built without SBOMs",
                     exc,
@@ -435,110 +439,32 @@ if _bdist_wheel is not None:
             shutil.rmtree(tmp, ignore_errors=True)
             return None
 
-        def _generate_sboms(self, tmp_dir: str) -> bool:
-            """Generate both CycloneDX SBOMs into tmp_dir.
+        def _generate_sboms(self, tmp_dir: str) -> None:
+            """Generate the wheel SBOM into tmp_dir.
 
-            Returns True on success, False when cyclonedx-py is not available.
+            Produces onnx-bundled.cdx.json describing the C++ libraries
+            (protobuf, abseil-cpp, nanobind) compiled into onnx_cpp2py_export
+            and physically contained in the wheel, per PEP 770.
+
+            Uses tools/extract_cmake_fetchcontent.py — no external tools required.
             """
-            # Locate the cyclonedx-py CLI; fall back to running it as a module
-            cyclonedx_exe = shutil.which("cyclonedx-py")
-            if cyclonedx_exe is not None:
-                cyclonedx_cmd: list[str] = [cyclonedx_exe]
-            else:
-                try:
-                    subprocess.check_call(  # noqa: S603
-                        [sys.executable, "-m", "cyclonedx", "--version"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                    cyclonedx_cmd = [sys.executable, "-m", "cyclonedx"]
-                except (subprocess.CalledProcessError, FileNotFoundError):
-                    logging.info(  # noqa: LOG015
-                        "cyclonedx-py not found; wheel will be built without embedded SBOMs"
-                    )
-                    return False
-
             subject_name = "onnx-weekly" if ONNX_PREVIEW_BUILD else "onnx"
             subject_version = VERSION_INFO["version"]
 
-            # --- Runtime SBOM ---
-            # Merge requirements.txt + requirements-reference.txt into one file
-            merged_req = os.path.join(tmp_dir, "runtime-requirements.txt")
-            with open(merged_req, "w", encoding="utf-8") as fout:
-                for fname in ("requirements.txt", "requirements-reference.txt"):
-                    req_path = os.path.join(TOP_DIR, fname)
-                    if os.path.exists(req_path):
-                        with open(req_path, encoding="utf-8") as fin:
-                            fout.write(fin.read())
-
-            runtime_sbom = os.path.join(tmp_dir, "onnx-runtime.cdx.json")
-            subprocess.check_call(  # noqa: S603
-                [
-                    *cyclonedx_cmd,
-                    "requirements",
-                    merged_req,
-                    "--output-format",
-                    "JSON",
-                    "--output-file",
-                    runtime_sbom,
-                ],
-            )
-
-            # Annotate with lifecycle phase and subject component
-            with open(runtime_sbom, encoding="utf-8") as f:
-                bom = json.load(f)
-            meta = bom.setdefault("metadata", {})
-            meta["lifecycles"] = [{"phase": "operations"}]
-            meta["authors"] = [{"name": "ONNX Project Contributors"}]
-            meta["supplier"] = {
-                "name": "Linux Foundation",
-                "url": ["https://www.linuxfoundation.org"],
-            }
-            meta["component"] = {
-                "type": "library",
-                "name": subject_name,
-                "version": subject_version,
-                "purl": f"pkg:pypi/{subject_name}@{subject_version}",
-            }
-            with open(runtime_sbom, "w", encoding="utf-8") as f:
-                json.dump(bom, f, indent=2)
-
-            # --- Build SBOM ---
-            # Start from Python build deps, then merge CMake FetchContent entries
-            build_python_sbom = os.path.join(tmp_dir, "build-python.cdx.json")
-            subprocess.check_call(  # noqa: S603
-                [
-                    *cyclonedx_cmd,
-                    "requirements",
-                    os.path.join(TOP_DIR, "requirements-release_build.txt"),
-                    "--output-format",
-                    "JSON",
-                    "--output-file",
-                    build_python_sbom,
-                ],
-            )
-
-            build_sbom = os.path.join(tmp_dir, "onnx-build.cdx.json")
             subprocess.check_call(  # noqa: S603
                 [
                     sys.executable,
                     os.path.join(TOP_DIR, "tools", "extract_cmake_fetchcontent.py"),
                     "--cmake",
                     os.path.join(TOP_DIR, "CMakeLists.txt"),
-                    "--merge-into",
-                    build_python_sbom,
-                    "--lifecycle",
-                    "build",
                     "--subject-name",
                     subject_name,
                     "--subject-version",
                     subject_version,
                     "--output",
-                    build_sbom,
+                    os.path.join(tmp_dir, "onnx-bundled.cdx.json"),
                 ],
             )
-
-            return True
 
 
 CMD_CLASS = {

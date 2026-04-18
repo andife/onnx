@@ -130,15 +130,15 @@ jobs:
       env:
         SUBJECT_NAME: ${{ needs.setup.outputs.subject_name }}
         SUBJECT_VERSION: ${{ needs.setup.outputs.subject_version }}
+      shell: python
       run: |
-        python - <<'EOF'
         import json
         import os
         from pathlib import Path
         bom = json.loads(Path("onnx-runtime.cdx.json").read_text())
         meta = bom.setdefault("metadata", {})
         meta["lifecycles"] = [{"phase": "operations"}]
-        meta["authors"] = [{"name": "ONNX Project Contributors"}]
+        meta["manufacturer"] = {"name": "ONNX Project Contributors"}
         meta["supplier"] = {"name": "Linux Foundation", "url": ["https://www.linuxfoundation.org"]}
         name = os.environ["SUBJECT_NAME"]
         version = os.environ["SUBJECT_VERSION"]
@@ -149,7 +149,6 @@ jobs:
             "purl": f"pkg:pypi/{name}@{version}",
         }
         Path("onnx-runtime.cdx.json").write_text(json.dumps(bom, indent=2))
-        EOF
 
     - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
       with:
@@ -190,14 +189,14 @@ jobs:
       env:
         SUBJECT_NAME: ${{ needs.setup.outputs.subject_name }}
         SUBJECT_VERSION: ${{ needs.setup.outputs.subject_version }}
-      run: |
-        python tools/extract_cmake_fetchcontent.py \
-          --cmake CMakeLists.txt \
-          --merge-into build-python.cdx.json \
-          --lifecycle build \
-          --subject-name "$SUBJECT_NAME" \
-          --subject-version "$SUBJECT_VERSION" \
-          --output onnx-build.cdx.json
+      run: >
+        python tools/extract_cmake_fetchcontent.py
+        --cmake CMakeLists.txt
+        --merge-into build-python.cdx.json
+        --lifecycle build
+        --subject-name "$SUBJECT_NAME"
+        --subject-version "$SUBJECT_VERSION"
+        --output onnx-build.cdx.json
 
     - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
       with:
