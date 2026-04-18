@@ -99,15 +99,14 @@ jobs:
           source "$EMSDK/emsdk_env.sh" > /dev/null
           git clone --depth 1 --branch "v$PROTOBUF_VERSION" https://github.com/protocolbuffers/protobuf.git protobuf-wasm
           git -C protobuf-wasm submodule update --init --recursive
-          cmake -S protobuf-wasm -B protobuf-wasm/build_source \
+          emcmake cmake -S protobuf-wasm -B protobuf-wasm/build_source \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
             -Dprotobuf_ABSL_PROVIDER=module \
             -Dprotobuf_BUILD_PROTOC_BINARIES=OFF \
             -Dprotobuf_BUILD_SHARED_LIBS=OFF \
             -Dprotobuf_BUILD_TESTS=OFF \
-            -Dprotobuf_WITH_ZLIB=OFF \
-            -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+            -Dprotobuf_WITH_ZLIB=OFF
           cmake --build protobuf-wasm/build_source --parallel "$(nproc)"
 
       - name: Build host protoc
