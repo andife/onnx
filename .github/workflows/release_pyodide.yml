@@ -62,8 +62,9 @@ jobs:
           pyodide xbuildenv install-emscripten
 
       - name: Export emscripten environment
+        env:
+          EMSDK_DIR: ${{ steps.pyodide-config.outputs.emsdk_dir }}
         run: |
-          EMSDK_DIR="${{ steps.pyodide-config.outputs.emsdk_dir }}"
           echo "EMSDK=$EMSDK_DIR" >> "$GITHUB_ENV"
           echo "$EMSDK_DIR" >> "$GITHUB_PATH"
           echo "$EMSDK_DIR/upstream/emscripten" >> "$GITHUB_PATH"
