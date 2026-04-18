@@ -249,6 +249,11 @@ jobs:
           name: wheels-${{ env.OS_NAME }}
           path: dist
 
+      - name: Install pyodide-build
+        run: |
+          # pyodide-build 0.34.1 outputs a PEP 783-compatible wheel that can be uploaded to PyPI
+          python -m pip install -q pyodide-build==0.34.1
+
       - name: Validate downloaded wheel
         run: |
           python - <<'PY'
@@ -259,7 +264,29 @@ jobs:
           if len(wheels) != 1:
               raise SystemExit(f"Expected exactly one wheel, found {len(wheels)}")
 
-          with zipfile.ZipFile(wheels[0]) as archive:
+          wheel = wheels[0]
+          if "abi3" not in wheel.name:
+              raise SystemExit(f"Expected a PEP 783 abi3-tagged wheel, got: {wheel.name}")
+
+          with zipfile.ZipFile(wheel) as archive:
               if archive.testzip() is not None:
                   raise SystemExit("Downloaded wheel failed zip validation")
+          PY
+
+      - name: Run smoke test in Pyodide
+        run: |
+          wheel_file="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          pyodide venv .venv
+          source .venv/bin/activate
+          pip install -q "$wheel_file"
+          python - <<'PY'
+          import onnx
+
+          model = onnx.parser.parse_model(
+              "agraph (float[N] x) => (float[N] y) { y = onnx.Relu(x) }"
+          )
+          onnx.checker.check_model(model)
+          inferred = onnx.shape_inference.infer_shapes(model)
+          assert inferred is not None
+          print("onnx", onnx.__version__, "OK")
           PY
