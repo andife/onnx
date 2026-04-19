@@ -488,14 +488,14 @@ if(ONNX_BUILD_PYTHON)
   endif()
 
   # Configure nanobind: https://nanobind.readthedocs.io/en/latest/api_cmake.html
-  # STABLE_ABI (Py_LIMITED_API) is disabled for Pyodide: Pyodide's wasm runtime
-  # does not export the limited-API symbols required to load .abi3.so modules.
+  # LTO is disabled for Pyodide: wasm SIDE_MODULE builds with LTO+STABLE_ABI can
+  # drop PyInit_* from the wasm export table, causing Pyodide's loader to fail.
   # pywasmcross does not set the EMSCRIPTEN cmake variable; detect via the node
   # cross-compilation emulator that pyodide-build always injects.
   if(CMAKE_CROSSCOMPILING_EMULATOR MATCHES "node")
     nanobind_add_module(
       onnx_cpp2py_export
-      NB_STATIC NB_DOMAIN onnx FREE_THREADED LTO
+      NB_STATIC NB_DOMAIN onnx STABLE_ABI FREE_THREADED
       "${ONNX_ROOT}/onnx/cpp2py_export.cc" ${ONNX_SRCS} ${ONNX_PROTO_SRCS})
   else()
     nanobind_add_module(
