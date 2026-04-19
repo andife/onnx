@@ -266,8 +266,8 @@ jobs:
               raise SystemExit(f"Expected exactly one wheel, found {len(wheels)}")
 
           wheel = wheels[0]
-          if "abi3" not in wheel.name:
-              raise SystemExit(f"Expected a PEP 783 abi3-tagged wheel, got: {wheel.name}")
+          if "wasm32" not in wheel.name:
+              raise SystemExit(f"Expected a Pyodide wasm32-emscripten wheel, got: {wheel.name}")
 
           with zipfile.ZipFile(wheel) as archive:
               if archive.testzip() is not None:

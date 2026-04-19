@@ -488,10 +488,19 @@ if(ONNX_BUILD_PYTHON)
   endif()
 
   # Configure nanobind: https://nanobind.readthedocs.io/en/latest/api_cmake.html
-  nanobind_add_module(
-    onnx_cpp2py_export
-    NB_STATIC NB_DOMAIN onnx STABLE_ABI FREE_THREADED LTO
-    "${ONNX_ROOT}/onnx/cpp2py_export.cc" ${ONNX_SRCS} ${ONNX_PROTO_SRCS})
+  # STABLE_ABI (Py_LIMITED_API) is disabled for Emscripten: Pyodide's wasm runtime
+  # does not export the limited-API symbols required to load .abi3.so modules.
+  if(EMSCRIPTEN)
+    nanobind_add_module(
+      onnx_cpp2py_export
+      NB_STATIC NB_DOMAIN onnx FREE_THREADED LTO
+      "${ONNX_ROOT}/onnx/cpp2py_export.cc" ${ONNX_SRCS} ${ONNX_PROTO_SRCS})
+  else()
+    nanobind_add_module(
+      onnx_cpp2py_export
+      NB_STATIC NB_DOMAIN onnx STABLE_ABI FREE_THREADED LTO
+      "${ONNX_ROOT}/onnx/cpp2py_export.cc" ${ONNX_SRCS} ${ONNX_PROTO_SRCS})
+  endif()
   add_dependencies(onnx_cpp2py_export onnx)
 endif()
 
