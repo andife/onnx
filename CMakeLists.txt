@@ -488,15 +488,17 @@ if(ONNX_BUILD_PYTHON)
   endif()
 
   # Configure nanobind: https://nanobind.readthedocs.io/en/latest/api_cmake.html
-  # FREE_THREADED and LTO are disabled for Pyodide: FREE_THREADED causes nanobind
-  # to call PyUnstable_Module_SetGIL(), which is outside the stable ABI and not
-  # exported by Pyodide's wasm runtime, causing the module to fail to load.
+  # For Pyodide, STABLE_ABI, FREE_THREADED, and LTO are all disabled:
+  # - STABLE_ABI produces abi3.so which Pyodide's WASM dynamic linker does not
+  #   recognize; the standard cpython-NNN-wasm32-emscripten.so format is required.
+  # - FREE_THREADED causes nanobind to call PyUnstable_Module_SetGIL(), which is
+  #   outside the stable ABI and not exported by Pyodide's wasm runtime.
   # pywasmcross does not set the EMSCRIPTEN cmake variable; detect via the node
   # cross-compilation emulator that pyodide-build always injects.
   if(CMAKE_CROSSCOMPILING_EMULATOR MATCHES "node")
     nanobind_add_module(
       onnx_cpp2py_export
-      NB_STATIC NB_DOMAIN onnx STABLE_ABI
+      NB_STATIC NB_DOMAIN onnx
       "${ONNX_ROOT}/onnx/cpp2py_export.cc" ${ONNX_SRCS} ${ONNX_PROTO_SRCS})
   else()
     nanobind_add_module(
