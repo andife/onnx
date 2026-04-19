@@ -2,6 +2,14 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+// Ensure PyInit function is visible in WASM module exports.
+// nanobind sets -fvisibility=hidden; EMSCRIPTEN_KEEPALIVE overrides this for
+// the PyInit symbol so Pyodide can locate and call it.
+extern "C" EMSCRIPTEN_KEEPALIVE PyObject* PyInit_onnx_cpp2py_export(void);
+#endif
+
 #include <nanobind/nanobind.h>
 #include <nanobind/operators.h>
 #include <nanobind/stl/function.h>
