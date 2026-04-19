@@ -329,8 +329,6 @@ CMD_CLASS = {
 # Enable limited ABI build
 # nanobind supports limited ABI for Python 3.12 and later.
 # https://blog.trailofbits.com/2022/11/15/python-wheels-abi-abi3audit/
-# Disabled for Pyodide: the WASM dynamic linker requires the standard
-# cpython-NNN-wasm32-emscripten.so naming and module format.
 
 # 1. The Py_LIMITED_API macro is defined in the extension
 # 2. py_limited_api in Extension tags the extension as abi3
@@ -338,8 +336,7 @@ CMD_CLASS = {
 
 NO_GIL = hasattr(sys, "_is_gil_enabled") and not sys._is_gil_enabled()
 PY_312_OR_NEWER = sys.version_info >= (3, 12)
-IS_PYODIDE = "emscripten" in os.environ.get("_PYTHON_HOST_PLATFORM", "")
-USE_LIMITED_API = not NO_GIL and PY_312_OR_NEWER and platform.system() != "FreeBSD" and not IS_PYODIDE
+USE_LIMITED_API = not NO_GIL and PY_312_OR_NEWER and platform.system() != "FreeBSD"
 
 macros = []
 if USE_LIMITED_API:

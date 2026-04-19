@@ -137,7 +137,7 @@ jobs:
             -DProtobuf_LITE_LIBRARY=${{ github.workspace }}/protobuf-wasm/build_source/libprotobuf-lite.a
         run: |
           source "$EMSDK/emsdk_env.sh" > /dev/null
-          pyodide build
+          pyodide build --exports PyInit_onnx_cpp2py_export
 
       - name: Remove test data from wheel
         run: |
