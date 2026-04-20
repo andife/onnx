@@ -40,8 +40,9 @@ jobs:
         run: |
           python -m pip install -q --upgrade pip
           python -m pip install -q -r requirements-release_build.txt
-          # pyodide-build 0.34.1 outputs a PEP 783-compatible wheel that can be uploaded to PyPI
-          python -m pip install -q pyodide-build==0.34.1
+          # Temporarily using pyodide-build from GitHub main for development/testing upstream fixes.
+          # TODO: pin back to a release version (e.g. pyodide-build==0.34.x) once upstream is stable.
+          python -m pip install -q "pyodide-build @ git+https://github.com/pyodide/pyodide.git@75a92780d6188b7d5c0f1e69ad9f6149004a0149#subdirectory=pyodide-build"
 
       - name: Get Pyodide config
         id: pyodide-config
@@ -137,7 +138,7 @@ jobs:
             -DProtobuf_LITE_LIBRARY=${{ github.workspace }}/protobuf-wasm/build_source/libprotobuf-lite.a
         run: |
           source "$EMSDK/emsdk_env.sh" > /dev/null
-          pyodide build --exports "PyInit_onnx_cpp2py_export,"
+          pyodide build
 
       - name: Remove test data from wheel
         run: |
@@ -252,8 +253,9 @@ jobs:
 
       - name: Install pyodide-build
         run: |
-          # pyodide-build 0.34.1 outputs a PEP 783-compatible wheel that can be uploaded to PyPI
-          python -m pip install -q pyodide-build==0.34.1
+          # Temporarily using pyodide-build from GitHub main for development/testing upstream fixes.
+          # TODO: pin back to a release version (e.g. pyodide-build==0.34.x) once upstream is stable.
+          python -m pip install -q "pyodide-build @ git+https://github.com/pyodide/pyodide.git@75a92780d6188b7d5c0f1e69ad9f6149004a0149#subdirectory=pyodide-build"
 
       - name: Validate downloaded wheel
         run: |
