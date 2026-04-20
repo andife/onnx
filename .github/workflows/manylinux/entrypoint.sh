@@ -69,7 +69,7 @@ echo "auditwheel version: $(auditwheel --version)"
 # find -exec does not preserve failed exit codes, so use an output file for failures
 failed_wheels=$PWD/failed-wheels
 rm -f "$failed_wheels"
-find . -type f -iname "*-linux*.whl" -exec sh -c 'auditwheel repair -v "$1" -w "$(dirname "$1")" --plat "$2" || { echo "Repairing wheels failed."; auditwheel show "$1" >> "$3"; }' _ {} "${PLAT}" "$failed_wheels" \;
+find . -type f -iname "*-linux*.whl" -exec sh -c 'auditwheel -v repair "$1" -w "$(dirname "$1")" --plat "$2" || { echo "Repairing wheels failed."; auditwheel show "$1" >> "$3"; }' _ {} "${PLAT}" "$failed_wheels" \;
 
 if [[ -f "$failed_wheels" ]]; then
     echo "Repairing wheels failed:"
