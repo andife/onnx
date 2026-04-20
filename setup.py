@@ -329,7 +329,8 @@ class BuildExt(setuptools.command.build_ext.build_ext):
 
 def _annotate_sbom_occurrences(sbom_data: bytes, binary_paths: list[str]) -> bytes:
     """Patch each component in the SBOM with evidence.occurrences listing the
-    compiled binary files inside the wheel that contain the bundled code."""
+    compiled binary files inside the wheel that contain the bundled code.
+    """
     if not binary_paths:
         return sbom_data
     bom = json.loads(sbom_data.decode("utf-8"))
@@ -392,7 +393,8 @@ def _inject_sboms_into_wheel(wheel_path: str, sbom_dir: str) -> None:
             record_rows.append([arcname, f"sha256={digest}", str(len(data))])
             sbom_entries.append((arcname, data))
             logging.info(  # noqa: LOG015
-                "SBOM to embed: %s (%d bytes)", os.path.basename(sbom_path), len(data))
+                "SBOM to embed: %s (%d bytes)", os.path.basename(sbom_path), len(data)
+            )
 
         # Build updated RECORD content (RECORD entry itself always has empty hash/size)
         record_buf = io.StringIO()
@@ -454,14 +456,15 @@ if _bdist_wheel is not None:
             tmp = tempfile.mkdtemp(prefix="onnx-sbom-")
             try:
                 self._generate_sboms(tmp)
-                return tmp
             except Exception as exc:  # noqa: BLE001 — any failure must not block the build
                 logging.warning(  # noqa: LOG015
                     "SBOM generation failed (%s); wheel will be built without SBOMs",
                     exc,
                 )
-            shutil.rmtree(tmp, ignore_errors=True)
-            return None
+                shutil.rmtree(tmp, ignore_errors=True)
+                return None
+            else:
+                return tmp
 
         def _generate_sboms(self, tmp_dir: str) -> None:
             """Generate the wheel SBOM into tmp_dir.

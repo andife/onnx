@@ -153,6 +153,7 @@ def _apply_url_fields(comp: dict[str, Any], entry: dict[str, str], text: str) ->
         # Prefer the explicit version variable (with v-prefix) over the URL tag so
         # that comp["version"] and the purl tag are always consistent (e.g. protobuf
         # uses tag v33.6 in the download URL but reports its version as 6.33.6).
+        tag: str | None
         if version:
             tag = f"v{version}"
         else:
@@ -214,7 +215,9 @@ def _build_component(entry: dict[str, str], text: str) -> dict[str, Any]:
     if spdx_id:
         comp["licenses"] = [{"license": {"id": spdx_id}}]
 
-    comp["bom-ref"] = f"{canonical_name}@{comp['version']}" if "version" in comp else canonical_name
+    comp["bom-ref"] = (
+        f"{canonical_name}@{comp['version']}" if "version" in comp else canonical_name
+    )
     return comp
 
 
