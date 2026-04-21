@@ -123,34 +123,20 @@ jobs:
       run: |
         cat requirements.txt requirements-reference.txt > /tmp/runtime-requirements.txt
         cyclonedx-py requirements /tmp/runtime-requirements.txt \
+          --pyproject pyproject.toml \
           --output-format JSON \
           --output-file onnx-runtime.cdx.json
 
     - name: Annotate lifecycle phase and subject component
-      env:
-        SUBJECT_NAME: ${{ needs.setup.outputs.subject_name }}
-        SUBJECT_VERSION: ${{ needs.setup.outputs.subject_version }}
       shell: python
       run: |
         import json
-        import os
         from pathlib import Path
         bom = json.loads(Path("onnx-runtime.cdx.json").read_text())
         meta = bom.setdefault("metadata", {})
         meta["lifecycles"] = [{"phase": "operations"}]
         meta["manufacturer"] = {"name": "ONNX Project Contributors"}
         meta["supplier"] = {"name": "Linux Foundation", "url": ["https://www.linuxfoundation.org"]}
-        name = os.environ["SUBJECT_NAME"]
-        version = os.environ["SUBJECT_VERSION"]
-        root_ref = f"{name}@{version}"
-        meta["component"] = {
-            "type": "library",
-            "name": name,
-            "version": version,
-            "description": "Open Neural Network Exchange (ONNX) — open format for AI/ML models",
-            "purl": f"pkg:pypi/{name}@{version}",
-            "bom-ref": root_ref,
-        }
         Path("onnx-runtime.cdx.json").write_text(json.dumps(bom, indent=2))
 
     - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
