@@ -363,7 +363,7 @@ def _inject_sboms_into_wheel(wheel_path: str, sbom_dir: str) -> None:
                 if info.filename.endswith(".dist-info/RECORD")
             ]
             if len(record_paths) != 1:
-                raise ValueError(
+                raise ValueError(  # noqa: TRY301
                     f"Expected exactly one .dist-info/RECORD in {wheel_basename}, "
                     f"found {len(record_paths)}"
                 )
@@ -446,13 +446,6 @@ if _bdist_wheel is not None:
         """
 
         def run(self) -> None:
-            existing = set(glob.glob(os.path.join(self.dist_dir, "*.whl")))
-            sbom_dir = self._try_generate_sboms()
-            super().run()
-            if sbom_dir is not None:
-                try:
-                    new_wheels = (
-                        set(glob.glob(os.path.join(self.dist_dir, "*.whl"))) - existing
             sbom_dir = self._try_generate_sboms()
             super().run()
             if sbom_dir is not None:
@@ -483,6 +476,7 @@ if _bdist_wheel is not None:
                     wheel_paths.append(candidate)
 
             return sorted(set(wheel_paths))
+
         def _try_generate_sboms(self) -> str | None:
             """Return path to a temp dir containing the generated SBOM, or None on failure."""
             tmp = tempfile.mkdtemp(prefix="onnx-sbom-")
@@ -550,9 +544,10 @@ if _bdist_wheel is not None:
                     "bom-ref": root_ref,
                 }
                 component_refs = [c["bom-ref"] for c in components if "bom-ref" in c]
-                bom.setdefault("dependencies", []).insert(
-                    0, {"ref": root_ref, "dependsOn": component_refs}
-                )
+                deps = bom.setdefault("dependencies", [])
+                deps.insert(0, {"ref": root_ref, "dependsOn": component_refs})
+                for ref in component_refs:
+                    deps.append({"ref": ref})
             out = Path(os.path.join(tmp_dir, "onnx-bundled.cdx.json"))
             out.write_text(json.dumps(bom, indent=2), encoding="utf-8")
 
