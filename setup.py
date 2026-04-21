@@ -447,19 +447,36 @@ if _bdist_wheel is not None:
                 try:
                     new_wheels = (
                         set(glob.glob(os.path.join(self.dist_dir, "*.whl"))) - existing
-                    )
-                    for wheel_path in sorted(new_wheels):
-                        try:
-                            _inject_sboms_into_wheel(wheel_path, sbom_dir)
-                        except Exception as exc:  # noqa: BLE001 — SBOM embedding must not block the build
-                            logging.warning(  # noqa: LOG015
-                                "SBOM embedding failed for %s (%s); leaving wheel unchanged",
-                                wheel_path,
-                                exc,
-                            )
+            sbom_dir = self._try_generate_sboms()
+            super().run()
+            if sbom_dir is not None:
+                try:
+                    for wheel_path in self._built_wheel_paths():
+                        _inject_sboms_into_wheel(wheel_path, sbom_dir)
                 finally:
                     shutil.rmtree(sbom_dir, ignore_errors=True)
 
+        def _built_wheel_paths(self) -> list[str]:
+            """Return the wheel path(s) produced by this command invocation."""
+            wheel_path = os.path.join(
+                self.dist_dir, f"{self.get_archive_basename()}.whl"
+            )
+            if os.path.exists(wheel_path):
+                return [wheel_path]
+
+            wheel_paths = []
+            for command, _pyversion, filename in getattr(
+                self.distribution, "dist_files", []
+            ):
+                if command != "bdist_wheel":
+                    continue
+                candidate = filename
+                if not os.path.isabs(candidate):
+                    candidate = os.path.join(self.dist_dir, candidate)
+                if os.path.exists(candidate):
+                    wheel_paths.append(candidate)
+
+            return sorted(set(wheel_paths))
         def _try_generate_sboms(self) -> str | None:
             """Return path to a temp dir containing the generated SBOM, or None on failure."""
             tmp = tempfile.mkdtemp(prefix="onnx-sbom-")
