@@ -232,8 +232,12 @@ _ONNX_SUPPLIER: dict[str, Any] = {
 }
 
 
+_SCHEMA_URL = "https://cyclonedx.org/schema/bom-1.6.schema.json"
+
+
 def _make_bom(components: list[dict[str, Any]], lifecycle: str) -> dict[str, Any]:
     return {
+        "$schema": _SCHEMA_URL,
         "bomFormat": "CycloneDX",
         "specVersion": "1.6",
         "serialNumber": f"urn:uuid:{uuid.uuid4()}",
@@ -254,6 +258,7 @@ def _merge_into(
 ) -> dict[str, Any]:
     """Load an existing CycloneDX BOM and append new_components to it."""
     bom: dict[str, Any] = json.loads(base_path.read_text(encoding="utf-8"))
+    bom.setdefault("$schema", _SCHEMA_URL)
     bom.setdefault("components", []).extend(new_components)
     meta = bom.setdefault("metadata", {})
     meta["lifecycles"] = [{"phase": lifecycle}]
@@ -336,11 +341,15 @@ def main() -> None:
             "bom-ref": root_ref,
         }
         # Emit a dependency graph so consumers can see which C++ libraries the root
-        # component depends on.
+        # component depends on. Leaf entries (no dependsOn) are included for each
+        # component so the graph is complete per CycloneDX spec guidance.
         component_refs = [c["bom-ref"] for c in components if "bom-ref" in c]
-        bom.setdefault("dependencies", []).insert(
-            0, {"ref": root_ref, "dependsOn": component_refs}
-        )
+        deps = bom.setdefault("dependencies", [])
+        deps.insert(0, {"ref": root_ref, "dependsOn": component_refs})
+        existing_refs = {d["ref"] for d in deps}
+        for ref in component_refs:
+            if ref not in existing_refs:
+                deps.append({"ref": ref})
 
     out = Path(args.output).resolve()
     out.write_text(json.dumps(bom, indent=2), encoding="utf-8")

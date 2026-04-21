@@ -319,6 +319,9 @@ class TestMakeBom(unittest.TestCase):
             self.bom["metadata"]["manufacturer"]["name"] == "ONNX Project Contributors"
         )
 
+    def test_schema_field_present(self) -> None:
+        assert self.bom["$schema"] == "https://cyclonedx.org/schema/bom-1.6.schema.json"
+
 
 class TestMergeInto(unittest.TestCase):
     def _make_base_bom(self) -> dict:
@@ -370,6 +373,17 @@ class TestMergeInto(unittest.TestCase):
         result = self._merge(base, self._new_comps())
         refs = [d["ref"] for d in result["dependencies"]]
         assert refs.count(nanobind_ref) == 1
+
+    def test_schema_field_added_when_missing(self) -> None:
+        base = self._make_base_bom()
+        result = self._merge(base, self._new_comps())
+        assert result["$schema"] == "https://cyclonedx.org/schema/bom-1.6.schema.json"
+
+    def test_schema_field_preserved_when_present(self) -> None:
+        base = self._make_base_bom()
+        base["$schema"] = "https://cyclonedx.org/schema/bom-1.6.schema.json"
+        result = self._merge(base, self._new_comps())
+        assert result["$schema"] == "https://cyclonedx.org/schema/bom-1.6.schema.json"
 
 
 class TestAgainstRealCMakeLists(unittest.TestCase):
@@ -457,6 +471,70 @@ class TestAgainstRealCMakeLists(unittest.TestCase):
         protobuf = self.by_name["protobuf"]
         assert protobuf["version"] == expected
         assert f"@v{expected}" in protobuf["purl"]
+
+
+class TestMainCLI(unittest.TestCase):
+    """End-to-end tests for the main() entry point."""
+
+    def _run_main(self, extra_args: list[str]) -> dict:
+        cmake_snippet = _GIT_CMAKE
+        with tempfile.NamedTemporaryFile(
+            suffix=".txt", mode="w", delete=False, encoding="utf-8"
+        ) as cmake_f:
+            cmake_f.write(cmake_snippet)
+            cmake_path = cmake_f.name
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", mode="w", delete=False
+        ) as out_f:
+            out_path = out_f.name
+        saved = sys.argv[:]
+        try:
+            sys.argv = [
+                "extract_cmake_fetchcontent.py",
+                "--cmake",
+                cmake_path,
+                "--output",
+                out_path,
+                *extra_args,
+            ]
+            _mod.main()
+        finally:
+            sys.argv = saved
+            Path(cmake_path).unlink(missing_ok=True)
+        result = json.loads(Path(out_path).read_text(encoding="utf-8"))
+        Path(out_path).unlink(missing_ok=True)
+        return result
+
+    def test_schema_field_present(self) -> None:
+        bom = self._run_main([])
+        assert bom["$schema"] == "https://cyclonedx.org/schema/bom-1.6.schema.json"
+
+    def test_leaf_dependency_entries_added_with_subject(self) -> None:
+        bom = self._run_main(["--subject-name", "onnx", "--subject-version", "1.0.0"])
+        refs = {d["ref"] for d in bom.get("dependencies", [])}
+        nanobind_ref = f"nanobind@{_FIXTURE_NANOBIND_VERSION}"
+        assert "onnx@1.0.0" in refs
+        assert nanobind_ref in refs
+
+    def test_root_depends_on_components(self) -> None:
+        bom = self._run_main(["--subject-name", "onnx", "--subject-version", "1.0.0"])
+        root = next(d for d in bom["dependencies"] if d["ref"] == "onnx@1.0.0")
+        nanobind_ref = f"nanobind@{_FIXTURE_NANOBIND_VERSION}"
+        assert nanobind_ref in root["dependsOn"]
+
+    def test_leaf_entries_have_no_dependson(self) -> None:
+        bom = self._run_main(["--subject-name", "onnx", "--subject-version", "1.0.0"])
+        nanobind_ref = f"nanobind@{_FIXTURE_NANOBIND_VERSION}"
+        leaf = next(
+            (
+                d
+                for d in bom["dependencies"]
+                if d["ref"] == nanobind_ref and d["ref"] != "onnx@1.0.0"
+            ),
+            None,
+        )
+        assert leaf is not None
+        assert "dependsOn" not in leaf
 
 
 if __name__ == "__main__":
