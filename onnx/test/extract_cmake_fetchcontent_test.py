@@ -32,25 +32,32 @@ _merge_into = _mod._merge_into
 
 # ---------------------------------------------------------------------------
 # Minimal CMake snippets that mirror the real CMakeLists.txt patterns.
+# Version strings used here are synthetic fixture values — not tied to any
+# real release. Update these only if a test needs a different format.
 # ---------------------------------------------------------------------------
+
+_FIXTURE_ABSL_VERSION = "20240722.0"
+_FIXTURE_ABSL_SHA256 = "f50e5ac311a81382da7fa75b97310e4b9006474f9560ac46f54a9967f07d4ae3"
+_FIXTURE_NANOBIND_TAG = "v2.10.2"
+_FIXTURE_NANOBIND_VERSION = "2.10.2"  # tag without leading "v"
 
 # URL format mirrors the real abseil entry: .../releases/download/<ver>/name-<ver>.tar.gz
 # so the version is extracted from the /download/<ver>/ path segment, not the filename.
-_URL_CMAKE = """\
-set(AbseilURL https://github.com/abseil/abseil-cpp/releases/download/20240722.0/abseil-cpp-20240722.0.tar.gz)
-set(AbseilSHA256 f50e5ac311a81382da7fa75b97310e4b9006474f9560ac46f54a9967f07d4ae3)
+_URL_CMAKE = f"""\
+set(AbseilURL https://github.com/abseil/abseil-cpp/releases/download/{_FIXTURE_ABSL_VERSION}/abseil-cpp-{_FIXTURE_ABSL_VERSION}.tar.gz)
+set(AbseilSHA256 {_FIXTURE_ABSL_SHA256})
 FetchContent_Declare(
   absl
-  URL ${AbseilURL}
-  URL_HASH SHA256=${AbseilSHA256}
+  URL ${{AbseilURL}}
+  URL_HASH SHA256=${{AbseilSHA256}}
 )
 """
 
-_GIT_CMAKE = """\
+_GIT_CMAKE = f"""\
 FetchContent_Declare(
   nanobind
   GIT_REPOSITORY https://github.com/wjakob/nanobind.git
-  GIT_TAG v2.10.2
+  GIT_TAG {_FIXTURE_NANOBIND_TAG}
 )
 """
 
@@ -100,12 +107,12 @@ class TestResolve(unittest.TestCase):
 
 class TestFindVersionVariable(unittest.TestCase):
     def test_found(self) -> None:
-        text = "set(absl_version 20240722.0)"
-        assert _find_version_variable(text, "absl") == "20240722.0"
+        text = f"set(absl_version {_FIXTURE_ABSL_VERSION})"
+        assert _find_version_variable(text, "absl") == _FIXTURE_ABSL_VERSION
 
     def test_case_insensitive(self) -> None:
-        text = "set(ABSL_VERSION 20240722.0)"
-        assert _find_version_variable(text, "absl") == "20240722.0"
+        text = f"set(ABSL_VERSION {_FIXTURE_ABSL_VERSION})"
+        assert _find_version_variable(text, "absl") == _FIXTURE_ABSL_VERSION
 
     def test_not_found(self) -> None:
         assert _find_version_variable("set(OTHER_VERSION 1.0)", "absl") is None
@@ -166,7 +173,7 @@ class TestBuildComponent(unittest.TestCase):
     def test_url_component_version_from_url(self) -> None:
         comp = self._component_from(_URL_CMAKE, "absl")
         assert "version" in comp
-        assert "20240722" in comp["version"]
+        assert _FIXTURE_ABSL_VERSION in comp["version"]
 
     def test_url_component_no_trailing_dot_in_version(self) -> None:
         # Regression: greedy [\d.]* in the URL regex once pulled in the '.' from
@@ -180,21 +187,24 @@ class TestBuildComponent(unittest.TestCase):
 
     def test_url_component_purl_tag_consistent_with_version(self) -> None:
         # When an explicit version variable exists, the purl tag must match it
-        # so that comp["version"] and the purl tag are consistent.
-        cmake = """\
-set(MyDep_VERSION 6.33.6)
-set(MyURL https://github.com/example/mydep/releases/download/v33.6/mydep-33.6.tar.gz)
+        # so that comp["version"] and the purl tag are consistent even when the
+        # URL-embedded tag differs (e.g. URL has "v33.6" but VERSION says "6.33.6").
+        ver = "1.2.3"
+        url_tag = "v0.99"  # deliberately different from ver
+        cmake = f"""\
+set(MyDep_VERSION {ver})
+set(MyURL https://github.com/example/mydep/releases/download/{url_tag}/mydep-{url_tag}.tar.gz)
 FetchContent_Declare(
   MyDep
-  URL ${MyURL}
+  URL ${{MyURL}}
   URL_HASH SHA256=abc123
 )
 """
         variables = _parse_cmake_variables(cmake)
         entries = _parse_fetchcontent_declares(cmake, variables)
         comp = _build_component(entries[0], cmake)
-        assert comp["version"] == "6.33.6"
-        assert comp["purl"].endswith("@v6.33.6"), (
+        assert comp["version"] == ver
+        assert comp["purl"].endswith(f"@v{ver}"), (
             f"purl tag must match version, got: {comp['purl']}"
         )
 
@@ -208,11 +218,11 @@ FetchContent_Declare(
 
     def test_git_component_version_strips_v(self) -> None:
         comp = self._component_from(_GIT_CMAKE, "nanobind")
-        assert comp["version"] == "2.10.2"
+        assert comp["version"] == _FIXTURE_NANOBIND_VERSION
 
     def test_git_component_purl_uses_tag(self) -> None:
         comp = self._component_from(_GIT_CMAKE, "nanobind")
-        assert "v2.10.2" in comp["purl"]
+        assert _FIXTURE_NANOBIND_TAG in comp["purl"]
 
     def test_git_component_external_ref_vcs(self) -> None:
         comp = self._component_from(_GIT_CMAKE, "nanobind")
@@ -226,7 +236,7 @@ FetchContent_Declare(
             r for r in comp["externalReferences"] if r["type"] == "distribution"
         ]
         assert len(dist_refs) == 1
-        assert "v2.10.2" in dist_refs[0]["url"]
+        assert _FIXTURE_NANOBIND_TAG in dist_refs[0]["url"]
         assert dist_refs[0]["url"].endswith(".tar.gz")
 
     def test_git_component_license_nanobind(self) -> None:
@@ -235,11 +245,11 @@ FetchContent_Declare(
 
     def test_bom_ref_uses_canonical_name(self) -> None:
         comp = self._component_from(_URL_CMAKE, "absl")
-        assert comp["bom-ref"] == "abseil-cpp@20240722.0"
+        assert comp["bom-ref"] == f"abseil-cpp@{_FIXTURE_ABSL_VERSION}"
 
     def test_bom_ref_with_version(self) -> None:
         comp = self._component_from(_GIT_CMAKE, "nanobind")
-        assert comp["bom-ref"] == "nanobind@2.10.2"
+        assert comp["bom-ref"] == f"nanobind@{_FIXTURE_NANOBIND_VERSION}"
 
     def test_unknown_dep_no_license(self) -> None:
         cmake = """\
@@ -339,14 +349,16 @@ class TestMergeInto(unittest.TestCase):
     def test_dependencies_extended(self) -> None:
         result = self._merge(self._make_base_bom(), self._new_comps())
         refs = {d["ref"] for d in result["dependencies"]}
-        assert "nanobind@2.10.2" in refs
+        nanobind_ref = f"nanobind@{_FIXTURE_NANOBIND_VERSION}"
+        assert nanobind_ref in refs
 
     def test_no_duplicate_dependencies(self) -> None:
+        nanobind_ref = f"nanobind@{_FIXTURE_NANOBIND_VERSION}"
         base = self._make_base_bom()
-        base["dependencies"].append({"ref": "nanobind@2.10.2"})
+        base["dependencies"].append({"ref": nanobind_ref})
         result = self._merge(base, self._new_comps())
         refs = [d["ref"] for d in result["dependencies"]]
-        assert refs.count("nanobind@2.10.2") == 1
+        assert refs.count(nanobind_ref) == 1
 
 
 class TestAgainstRealCMakeLists(unittest.TestCase):
@@ -421,10 +433,17 @@ class TestAgainstRealCMakeLists(unittest.TestCase):
         assert "distribution" in types
 
     def test_protobuf_version_matches_version_variable(self) -> None:
-        # CMakeLists.txt sets Protobuf_VERSION "6.33.6" after FetchContent_Declare.
-        # The script must prefer that over the URL-embedded tag (v33.6).
-        assert self.by_name["protobuf"]["version"] == "6.33.6"
-        assert "@v6.33.6" in self.by_name["protobuf"]["purl"]
+        # CMakeLists.txt sets an explicit Protobuf_VERSION variable whose value
+        # may differ from the URL-embedded tag (e.g. tag "v33.6" vs version "6.33.6").
+        # The script must prefer the explicit variable over the URL tag.
+        text = self._CMAKE_PATH.read_text(encoding="utf-8")
+        variables = _parse_cmake_variables(text)
+        expected = variables.get("Protobuf_VERSION") or variables.get("PROTOBUF_VERSION")
+        if expected is None:
+            self.skipTest("Protobuf_VERSION variable not found in CMakeLists.txt")
+        protobuf = self.by_name["protobuf"]
+        assert protobuf["version"] == expected
+        assert f"@v{expected}" in protobuf["purl"]
 
 
 if __name__ == "__main__":
