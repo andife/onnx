@@ -34,7 +34,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # CMake parsing helpers
@@ -135,70 +135,6 @@ def _github_owner_repo(url: str) -> tuple[str, str] | None:
     return (m.group(1), m.group(2)) if m else None
 
 
-def _apply_url_fields(comp: dict[str, Any], entry: dict[str, str], text: str) -> None:
-    """Populate comp in-place for a URL-based FetchContent entry."""
-    url = entry["url"]
-
-    version = _find_version_variable(text, entry["name"])
-    if not version:
-        v = re.search(r"[/-]v?(\d+\.\d+[\d.]*)", url)
-        # Strip trailing dot that the greedy [\d.]* may pull in from ".tar.gz"
-        version = v.group(1).rstrip(".") if v else None
-    if version:
-        comp["version"] = version
-
-    gh = _github_owner_repo(url)
-    if gh:
-        owner, repo = gh
-        # Prefer the explicit version variable (with v-prefix) over the URL tag so
-        # that comp["version"] and the purl tag are always consistent (e.g. protobuf
-        # uses tag v33.6 in the download URL but reports its version as 6.33.6).
-        tag: str | None
-        if version:
-            tag = f"v{version}"
-        else:
-            tag_m = re.search(r"/download/(v?[^/]+)/", url)
-            tag = tag_m.group(1) if tag_m else None
-        if tag:
-            comp["purl"] = f"pkg:github/{owner}/{repo}@{tag}"
-
-    comp["externalReferences"] = [{"type": "distribution", "url": url}]
-
-    if "hash_alg" in entry:
-        # Normalize to CycloneDX hash algorithm names (e.g. SHA1 -> SHA-1)
-        alg = entry["hash_alg"].upper()
-        alg = re.sub(r"^SHA(\d+)$", r"SHA-\1", alg)
-        alg = re.sub(r"^MD(\d+)$", r"MD\1", alg)
-        comp["hashes"] = [{"alg": alg, "content": entry["hash_val"]}]
-
-
-def _apply_git_fields(comp: dict[str, Any], entry: dict[str, str]) -> None:
-    """Populate comp in-place for a git-based FetchContent entry."""
-    git_url = entry["git_url"]
-    tag = entry.get("git_tag", "")
-    # Strip leading 'v' to get a clean semver version string
-    version = tag.lstrip("v") if tag else None
-    if version:
-        comp["version"] = version
-
-    gh = _github_owner_repo(git_url)
-    if gh:
-        owner, repo = gh
-        ref = tag or version
-        comp["purl"] = (
-            f"pkg:github/{owner}/{repo}@{ref}" if ref else f"pkg:github/{owner}/{repo}"
-        )
-
-    refs: list[dict[str, str]] = [{"type": "vcs", "url": git_url}]
-    # Add a point-in-time distribution URL so consumers have a verifiable artifact
-    # reference alongside the VCS pointer.
-    if gh and tag:
-        owner, repo = gh
-        dist_url = f"https://github.com/{owner}/{repo}/archive/refs/tags/{tag}.tar.gz"
-        refs.append({"type": "distribution", "url": dist_url})
-    comp["externalReferences"] = refs
-
-
 def _build_component(entry: dict[str, str], text: str) -> dict[str, Any]:
     """Convert one parsed FetchContent entry to a CycloneDX component."""
     fetch_name = entry["name"].lower()
@@ -206,11 +142,61 @@ def _build_component(entry: dict[str, str], text: str) -> dict[str, Any]:
     comp: dict[str, Any] = {"type": "library", "name": canonical_name}
 
     if "url" in entry:
-        _apply_url_fields(comp, entry, text)
-    elif "git_url" in entry:
-        _apply_git_fields(comp, entry)
+        url = entry["url"]
+        version = _find_version_variable(text, entry["name"])
+        if not version:
+            v = re.search(r"[/-]v?(\d+\.\d+[\d.]*)", url)
+            # Strip trailing dot that the greedy [\d.]* may pull in from ".tar.gz"
+            version = v.group(1).rstrip(".") if v else None
+        if version:
+            comp["version"] = version
 
-    # License and bom-ref use the canonical name; lookup keyed on FetchContent name.
+        gh = _github_owner_repo(url)
+        if gh:
+            owner, repo = gh
+            # Prefer the explicit version variable (with v-prefix) over the URL tag so
+            # that comp["version"] and the purl tag are always consistent (e.g. protobuf
+            # uses tag v33.6 in the download URL but reports its version as 6.33.6).
+            tag: str | None
+            if version:
+                tag = f"v{version}"
+            else:
+                tag_m = re.search(r"/download/(v?[^/]+)/", url)
+                tag = tag_m.group(1) if tag_m else None
+            if tag:
+                comp["purl"] = f"pkg:github/{owner}/{repo}@{tag}"
+
+        comp["externalReferences"] = [{"type": "distribution", "url": url}]
+
+        if "hash_alg" in entry:
+            # Normalize to CycloneDX hash algorithm names (e.g. SHA1 -> SHA-1)
+            alg = re.sub(r"^SHA(\d+)$", r"SHA-\1", entry["hash_alg"].upper())
+            comp["hashes"] = [{"alg": alg, "content": entry["hash_val"]}]
+
+    elif "git_url" in entry:
+        git_url = entry["git_url"]
+        git_tag = entry.get("git_tag", "")
+        # Strip leading 'v' to get a clean semver version string
+        version = git_tag.lstrip("v") if git_tag else None
+        if version:
+            comp["version"] = version
+
+        gh = _github_owner_repo(git_url)
+        if gh:
+            owner, repo = gh
+            ref = git_tag or version
+            comp["purl"] = (
+                f"pkg:github/{owner}/{repo}@{ref}" if ref else f"pkg:github/{owner}/{repo}"
+            )
+
+        refs: list[dict[str, str]] = [{"type": "vcs", "url": git_url}]
+        # Add a point-in-time distribution URL so consumers have a verifiable artifact
+        # reference alongside the VCS pointer.
+        if gh and git_tag:
+            owner, repo = gh
+            refs.append({"type": "distribution", "url": f"https://github.com/{owner}/{repo}/archive/refs/tags/{git_tag}.tar.gz"})
+        comp["externalReferences"] = refs
+
     spdx_id = _KNOWN_LICENSES.get(fetch_name)
     if spdx_id:
         comp["licenses"] = [{"license": {"id": spdx_id}}]
@@ -225,6 +211,19 @@ def _build_component(entry: dict[str, str], text: str) -> dict[str, Any]:
 # BOM assembly
 # ---------------------------------------------------------------------------
 
+_TOOL_ENTRY: dict[str, Any] = {
+    "type": "application",
+    "name": "extract_cmake_fetchcontent.py",
+    "description": "Extracts CMake FetchContent dependencies into CycloneDX components",
+    "externalReferences": [{"type": "vcs", "url": "https://github.com/onnx/onnx"}],
+}
+
+_ONNX_MANUFACTURER: dict[str, Any] = {"name": "ONNX Project Contributors"}
+_ONNX_SUPPLIER: dict[str, Any] = {
+    "name": "Linux Foundation",
+    "url": ["https://www.linuxfoundation.org"],
+}
+
 
 def _make_bom(components: list[dict[str, Any]], lifecycle: str) -> dict[str, Any]:
     return {
@@ -235,23 +234,9 @@ def _make_bom(components: list[dict[str, Any]], lifecycle: str) -> dict[str, Any
         "metadata": {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "lifecycles": [{"phase": lifecycle}],
-            "manufacturer": {"name": "ONNX Project Contributors"},
-            "supplier": {
-                "name": "Linux Foundation",
-                "url": ["https://www.linuxfoundation.org"],
-            },
-            "tools": {
-                "components": [
-                    {
-                        "type": "application",
-                        "name": "extract_cmake_fetchcontent.py",
-                        "description": "Extracts CMake FetchContent dependencies into CycloneDX components",
-                        "externalReferences": [
-                            {"type": "vcs", "url": "https://github.com/onnx/onnx"}
-                        ],
-                    }
-                ]
-            },
+            "manufacturer": _ONNX_MANUFACTURER,
+            "supplier": _ONNX_SUPPLIER,
+            "tools": {"components": [_TOOL_ENTRY]},
         },
         "components": components,
     }
@@ -261,29 +246,14 @@ def _merge_into(
     base_path: Path, new_components: list[dict[str, Any]], lifecycle: str
 ) -> dict[str, Any]:
     """Load an existing CycloneDX BOM and append new_components to it."""
-    bom = cast("dict[str, Any]", json.loads(base_path.read_text(encoding="utf-8")))
+    bom: dict[str, Any] = json.loads(base_path.read_text(encoding="utf-8"))
     bom.setdefault("components", []).extend(new_components)
     meta = bom.setdefault("metadata", {})
     meta["lifecycles"] = [{"phase": lifecycle}]
-    meta["manufacturer"] = {"name": "ONNX Project Contributors"}
-    meta["supplier"] = {
-        "name": "Linux Foundation",
-        "url": ["https://www.linuxfoundation.org"],
-    }
-    # Record this script as an additional tool in the BOM provenance chain.
-    tools = meta.setdefault("tools", {})
-    tools.setdefault("components", []).append(
-        {
-            "type": "file",
-            "name": "extract_cmake_fetchcontent.py",
-            "description": "Extracts CMake FetchContent dependencies into CycloneDX components",
-            "externalReferences": [
-                {"type": "vcs", "url": "https://github.com/onnx/onnx"}
-            ],
-        }
-    )
-    # Add cmake components to the dependencies array so they appear in the
-    # dependency graph alongside the requirements-file components.
+    meta["manufacturer"] = _ONNX_MANUFACTURER
+    meta["supplier"] = _ONNX_SUPPLIER
+    meta.setdefault("tools", {}).setdefault("components", []).append(_TOOL_ENTRY)
+    # Add cmake components to the dependency graph alongside requirements-file components.
     deps = bom.setdefault("dependencies", [])
     existing_refs = {d["ref"] for d in deps}
     for comp in new_components:

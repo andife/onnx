@@ -26,6 +26,7 @@ import sysconfig
 import tempfile
 import textwrap
 import zipfile
+from pathlib import Path
 from typing import ClassVar
 
 try:
@@ -472,28 +473,42 @@ if _bdist_wheel is not None:
             Produces onnx-bundled.cdx.json describing the C++ libraries
             (protobuf, abseil-cpp, nanobind) compiled into onnx_cpp2py_export
             and physically contained in the wheel, per PEP 770.
-
-            Uses tools/extract_cmake_fetchcontent.py — no external tools required.
             """
+            import importlib.util
+
+            script = os.path.join(TOP_DIR, "tools", "extract_cmake_fetchcontent.py")
+            spec = importlib.util.spec_from_file_location("extract_cmake_fetchcontent", script)
+            assert spec and spec.loader
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+
             subject_name = "onnx-weekly" if ONNX_PREVIEW_BUILD else "onnx"
             subject_version = VERSION_INFO["version"]
 
-            subprocess.check_call(  # noqa: S603
-                [
-                    sys.executable,
-                    os.path.join(TOP_DIR, "tools", "extract_cmake_fetchcontent.py"),
-                    "--cmake",
-                    os.path.join(TOP_DIR, "CMakeLists.txt"),
-                    "--lifecycle",
-                    "post-build",
-                    "--subject-name",
-                    subject_name,
-                    "--subject-version",
-                    subject_version,
-                    "--output",
-                    os.path.join(tmp_dir, "onnx-bundled.cdx.json"),
-                ],
+            cmake_path = os.path.join(TOP_DIR, "CMakeLists.txt")
+            text = Path(cmake_path).read_text(encoding="utf-8")
+            variables = mod._parse_cmake_variables(text)
+            raw = mod._parse_fetchcontent_declares(text, variables)
+            components = [mod._build_component(e, text) for e in raw]
+            bom = mod._make_bom(components, "post-build")
+
+            name, version = subject_name, subject_version
+            root_ref = f"{name}@{version}"
+            bom.setdefault("metadata", {})["component"] = {
+                "type": "library",
+                "name": name,
+                "version": version,
+                "description": "Open Neural Network Exchange (ONNX) — open format for AI/ML models",
+                "purl": f"pkg:pypi/{name}@{version}",
+                "bom-ref": root_ref,
+            }
+            component_refs = [c["bom-ref"] for c in components if "bom-ref" in c]
+            bom.setdefault("dependencies", []).insert(
+                0, {"ref": root_ref, "dependsOn": component_refs}
             )
+
+            out = Path(os.path.join(tmp_dir, "onnx-bundled.cdx.json"))
+            out.write_text(json.dumps(bom, indent=2), encoding="utf-8")
 
 
 CMD_CLASS = {
