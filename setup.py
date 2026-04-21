@@ -449,7 +449,14 @@ if _bdist_wheel is not None:
                         set(glob.glob(os.path.join(self.dist_dir, "*.whl"))) - existing
                     )
                     for wheel_path in sorted(new_wheels):
-                        _inject_sboms_into_wheel(wheel_path, sbom_dir)
+                        try:
+                            _inject_sboms_into_wheel(wheel_path, sbom_dir)
+                        except Exception as exc:  # noqa: BLE001 — SBOM embedding must not block the build
+                            logging.warning(  # noqa: LOG015
+                                "SBOM embedding failed for %s (%s); leaving wheel unchanged",
+                                wheel_path,
+                                exc,
+                            )
                 finally:
                     shutil.rmtree(sbom_dir, ignore_errors=True)
 
