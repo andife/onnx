@@ -186,7 +186,9 @@ def _build_component(entry: dict[str, str], text: str) -> dict[str, Any]:
             owner, repo = gh
             ref = git_tag or version
             comp["purl"] = (
-                f"pkg:github/{owner}/{repo}@{ref}" if ref else f"pkg:github/{owner}/{repo}"
+                f"pkg:github/{owner}/{repo}@{ref}"
+                if ref
+                else f"pkg:github/{owner}/{repo}"
             )
 
         refs: list[dict[str, str]] = [{"type": "vcs", "url": git_url}]
@@ -194,7 +196,12 @@ def _build_component(entry: dict[str, str], text: str) -> dict[str, Any]:
         # reference alongside the VCS pointer.
         if gh and git_tag:
             owner, repo = gh
-            refs.append({"type": "distribution", "url": f"https://github.com/{owner}/{repo}/archive/refs/tags/{git_tag}.tar.gz"})
+            refs.append(
+                {
+                    "type": "distribution",
+                    "url": f"https://github.com/{owner}/{repo}/archive/refs/tags/{git_tag}.tar.gz",
+                }
+            )
         comp["externalReferences"] = refs
 
     spdx_id = _KNOWN_LICENSES.get(fetch_name)

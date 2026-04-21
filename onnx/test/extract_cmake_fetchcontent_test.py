@@ -37,7 +37,9 @@ _merge_into = _mod._merge_into
 # ---------------------------------------------------------------------------
 
 _FIXTURE_ABSL_VERSION = "20240722.0"
-_FIXTURE_ABSL_SHA256 = "f50e5ac311a81382da7fa75b97310e4b9006474f9560ac46f54a9967f07d4ae3"
+_FIXTURE_ABSL_SHA256 = (
+    "f50e5ac311a81382da7fa75b97310e4b9006474f9560ac46f54a9967f07d4ae3"
+)
 _FIXTURE_NANOBIND_TAG = "v2.10.2"
 _FIXTURE_NANOBIND_VERSION = "2.10.2"  # tag without leading "v"
 
@@ -438,7 +440,9 @@ class TestAgainstRealCMakeLists(unittest.TestCase):
         # The script must prefer the explicit variable over the URL tag.
         text = self._CMAKE_PATH.read_text(encoding="utf-8")
         variables = _parse_cmake_variables(text)
-        expected = variables.get("Protobuf_VERSION") or variables.get("PROTOBUF_VERSION")
+        expected = variables.get("Protobuf_VERSION") or variables.get(
+            "PROTOBUF_VERSION"
+        )
         if expected is None:
             self.skipTest("Protobuf_VERSION variable not found in CMakeLists.txt")
         protobuf = self.by_name["protobuf"]

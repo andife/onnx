@@ -12,6 +12,7 @@ import csv
 import datetime
 import glob
 import hashlib
+import importlib.util
 import io
 import json
 import logging
@@ -474,10 +475,10 @@ if _bdist_wheel is not None:
             (protobuf, abseil-cpp, nanobind) compiled into onnx_cpp2py_export
             and physically contained in the wheel, per PEP 770.
             """
-            import importlib.util
-
             script = os.path.join(TOP_DIR, "tools", "extract_cmake_fetchcontent.py")
-            spec = importlib.util.spec_from_file_location("extract_cmake_fetchcontent", script)
+            spec = importlib.util.spec_from_file_location(
+                "extract_cmake_fetchcontent", script
+            )
             assert spec and spec.loader
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)  # type: ignore[union-attr]
