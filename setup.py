@@ -493,28 +493,43 @@ if _bdist_wheel is not None:
             subject_name = "onnx-weekly" if ONNX_PREVIEW_BUILD else "onnx"
             subject_version = VERSION_INFO["version"]
 
-            cmake_path = os.path.join(TOP_DIR, "CMakeLists.txt")
-            text = Path(cmake_path).read_text(encoding="utf-8")
-            variables = mod._parse_cmake_variables(text)
-            raw = mod._parse_fetchcontent_declares(text, variables)
-            components = [mod._build_component(e, text) for e in raw]
-            bom = mod._make_bom(components, "post-build")
+            bom = None
+            for helper_name in (
+                "build_wheel_sbom",
+                "build_bundled_sbom",
+                "build_python_wheel_sbom",
+            ):
+                helper = getattr(mod, helper_name, None)
+                if helper is None:
+                    continue
+                try:
+                    bom = helper(TOP_DIR, subject_name, subject_version)
+                except TypeError:
+                    bom = helper(subject_name, subject_version)
+                break
 
-            name, version = subject_name, subject_version
-            root_ref = f"{name}@{version}"
-            bom.setdefault("metadata", {})["component"] = {
-                "type": "library",
-                "name": name,
-                "version": version,
-                "description": "Open Neural Network Exchange (ONNX) — open format for AI/ML models",
-                "purl": f"pkg:pypi/{name}@{version}",
-                "bom-ref": root_ref,
-            }
-            component_refs = [c["bom-ref"] for c in components if "bom-ref" in c]
-            bom.setdefault("dependencies", []).insert(
-                0, {"ref": root_ref, "dependsOn": component_refs}
-            )
+            if bom is None:
+                cmake_path = os.path.join(TOP_DIR, "CMakeLists.txt")
+                text = Path(cmake_path).read_text(encoding="utf-8")
+                variables = mod._parse_cmake_variables(text)
+                raw = mod._parse_fetchcontent_declares(text, variables)
+                components = [mod._build_component(e, text) for e in raw]
+                bom = mod._make_bom(components, "post-build")
 
+                name, version = subject_name, subject_version
+                root_ref = f"{name}@{version}"
+                bom.setdefault("metadata", {})["component"] = {
+                    "type": "library",
+                    "name": name,
+                    "version": version,
+                    "description": "Open Neural Network Exchange (ONNX) — open format for AI/ML models",
+                    "purl": f"pkg:pypi/{name}@{version}",
+                    "bom-ref": root_ref,
+                }
+                component_refs = [c["bom-ref"] for c in components if "bom-ref" in c]
+                bom.setdefault("dependencies", []).insert(
+                    0, {"ref": root_ref, "dependsOn": component_refs}
+                )
             out = Path(os.path.join(tmp_dir, "onnx-bundled.cdx.json"))
             out.write_text(json.dumps(bom, indent=2), encoding="utf-8")
 
