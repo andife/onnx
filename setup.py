@@ -352,17 +352,23 @@ def _inject_sboms_into_wheel(wheel_path: str, sbom_dir: str) -> None:
     if not sbom_files:
         return
 
-    # Derive dist-info prefix from wheel filename
-    # Format: {name}-{version}-{python}-{abi}-{platform}.whl
     wheel_basename = os.path.basename(wheel_path)
-    name_part, version_part = wheel_basename.split("-")[:2]
-    dist_info_prefix = f"{name_part}-{version_part}.dist-info"
-    record_arcname = f"{dist_info_prefix}/RECORD"
-
     tmp_path = wheel_path + ".tmp"
     try:
         with zipfile.ZipFile(wheel_path, "r") as src_zf:
             all_infos = src_zf.infolist()
+            record_paths = [
+                info.filename
+                for info in all_infos
+                if info.filename.endswith(".dist-info/RECORD")
+            ]
+            if len(record_paths) != 1:
+                raise ValueError(
+                    f"Expected exactly one .dist-info/RECORD in {wheel_basename}, "
+                    f"found {len(record_paths)}"
+                )
+            record_arcname = record_paths[0]
+            dist_info_prefix = record_arcname.rsplit("/", 1)[0]
             record_bytes = src_zf.read(record_arcname)
 
         # Discover compiled extension modules (.so / .pyd) present in the wheel.
