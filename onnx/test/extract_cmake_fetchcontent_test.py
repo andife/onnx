@@ -265,7 +265,16 @@ FetchContent_Declare(
         assert "licenses" not in comp
 
     def test_sha256_alg_normalized(self) -> None:
-        comp = self._component_from(_URL_CMAKE, "absl")
+        cmake = """\
+set(MyURL https://github.com/example/dep/archive/v1.0.tar.gz)
+set(MySHA abc123)
+FetchContent_Declare(
+  mydep
+  URL ${MyURL}
+  URL_HASH SHA256=${MySHA}
+)
+"""
+        comp = self._component_from(cmake, "mydep")
         assert comp["hashes"][0]["alg"] == "SHA-256"
 
     def test_sha1_alg_normalized(self) -> None:
