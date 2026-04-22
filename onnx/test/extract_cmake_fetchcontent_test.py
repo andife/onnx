@@ -343,12 +343,10 @@ class TestMergeInto(unittest.TestCase):
         return [_build_component(e, _GIT_CMAKE) for e in entries]
 
     def _merge(self, base: dict, new_comps: list) -> dict:
-        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
-            json.dump(base, f)
-            tmp = Path(f.name)
-        result = _merge_into(tmp, new_comps, "build")
-        tmp.unlink()
-        return result
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp) / "base.json"
+            tmp_path.write_text(json.dumps(base), encoding="utf-8")
+            return _merge_into(tmp_path, new_comps, "build")
 
     def test_components_appended(self) -> None:
         result = self._merge(self._make_base_bom(), self._new_comps())
@@ -526,11 +524,7 @@ class TestMainCLI(unittest.TestCase):
         bom = self._run_main(["--subject-name", "onnx", "--subject-version", "1.0.0"])
         nanobind_ref = f"nanobind@{_FIXTURE_NANOBIND_VERSION}"
         leaf = next(
-            (
-                d
-                for d in bom["dependencies"]
-                if d["ref"] == nanobind_ref and d["ref"] != "onnx@1.0.0"
-            ),
+            (d for d in bom["dependencies"] if d["ref"] == nanobind_ref),
             None,
         )
         assert leaf is not None

@@ -276,6 +276,41 @@ def _merge_into(
 
 
 # ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def build_bundled_sbom(cmake_path: str, name: str, version: str) -> dict[str, Any]:
+    """Return a CycloneDX 1.6 BOM dict for the C++ libraries bundled in an ONNX wheel.
+
+    Parses FetchContent_Declare blocks from *cmake_path* and sets *name*/*version*
+    as the root component with all fetched libraries as dependencies, suitable for
+    embedding in a wheel per PEP 770.
+    """
+    text = Path(cmake_path).read_text(encoding="utf-8")
+    variables = _parse_cmake_variables(text)
+    raw = _parse_fetchcontent_declares(text, variables)
+    components = [_build_component(entry, text) for entry in raw]
+    bom = _make_bom(components, "post-build")
+
+    root_ref = f"{name}@{version}"
+    bom.setdefault("metadata", {})["component"] = {
+        "type": "library",
+        "name": name,
+        "version": version,
+        "description": "Open Neural Network Exchange (ONNX) — open format for AI/ML models",
+        "purl": f"pkg:pypi/{name}@{version}",
+        "bom-ref": root_ref,
+    }
+    component_refs = [c["bom-ref"] for c in components if "bom-ref" in c]
+    deps = bom.setdefault("dependencies", [])
+    deps.insert(0, {"ref": root_ref, "dependsOn": component_refs})
+    for ref in component_refs:
+        deps.append({"ref": ref})
+    return bom
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
