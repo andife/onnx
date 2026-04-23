@@ -1,10 +1,10 @@
 # Copyright (c) ONNX Project Contributors
 #
 # SPDX-License-Identifier: Apache-2.0
-r"""Extract CMake FetchContent dependencies and emit a CycloneDX 1.6 BOM.
+r"""Extract CMake FetchContent dependencies and emit a CycloneDX 1.7 BOM.
 
 Parses FetchContent_Declare blocks from a CMakeLists.txt and generates
-CycloneDX 1.6 JSON components for each dependency. Supports both
+CycloneDX 1.7 JSON components for each dependency. Supports both
 URL-based (e.g. tarball with hash) and git-based (GIT_REPOSITORY/GIT_TAG)
 declarations.
 
@@ -232,14 +232,14 @@ _ONNX_SUPPLIER: dict[str, Any] = {
 }
 
 
-_SCHEMA_URL = "https://cyclonedx.org/schema/bom-1.6.schema.json"
+_SCHEMA_URL = "https://cyclonedx.org/schema/bom-1.7.schema.json"
 
 
 def _make_bom(components: list[dict[str, Any]], lifecycle: str) -> dict[str, Any]:
     return {
         "$schema": _SCHEMA_URL,
         "bomFormat": "CycloneDX",
-        "specVersion": "1.6",
+        "specVersion": "1.7",
         "serialNumber": f"urn:uuid:{uuid.uuid4()}",
         "version": 1,
         "metadata": {
@@ -281,7 +281,7 @@ def _merge_into(
 
 
 def build_bundled_sbom(cmake_path: str, name: str, version: str) -> dict[str, Any]:
-    """Return a CycloneDX 1.6 BOM dict for the C++ libraries bundled in an ONNX wheel.
+    """Return a CycloneDX 1.7 BOM dict for the C++ libraries bundled in an ONNX wheel.
 
     Parses FetchContent_Declare blocks from *cmake_path* and sets *name*/*version*
     as the root component with all fetched libraries as dependencies, suitable for
@@ -339,7 +339,7 @@ def main() -> None:
             "discovery",
             "decommission",
         ],
-        help="CycloneDX 1.6 lifecycle phase to annotate on the output BOM (default: build)",
+        help="CycloneDX 1.7 lifecycle phase to annotate on the output BOM (default: build)",
     )
     parser.add_argument("--output", required=True, help="Output CycloneDX JSON file")
     parser.add_argument(

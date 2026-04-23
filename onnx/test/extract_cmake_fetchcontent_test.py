@@ -302,7 +302,7 @@ class TestMakeBom(unittest.TestCase):
         assert self.bom["bomFormat"] == "CycloneDX"
 
     def test_spec_version(self) -> None:
-        assert self.bom["specVersion"] == "1.6"
+        assert self.bom["specVersion"] == "1.7"
 
     def test_serial_number_is_urn_uuid(self) -> None:
         assert self.bom["serialNumber"].startswith("urn:uuid:")
@@ -320,14 +320,14 @@ class TestMakeBom(unittest.TestCase):
         )
 
     def test_schema_field_present(self) -> None:
-        assert self.bom["$schema"] == "https://cyclonedx.org/schema/bom-1.6.schema.json"
+        assert self.bom["$schema"] == "https://cyclonedx.org/schema/bom-1.7.schema.json"
 
 
 class TestMergeInto(unittest.TestCase):
     def _make_base_bom(self) -> dict:
         return {
             "bomFormat": "CycloneDX",
-            "specVersion": "1.6",
+            "specVersion": "1.7",
             "serialNumber": "urn:uuid:00000000-0000-0000-0000-000000000001",
             "version": 1,
             "metadata": {},
@@ -375,13 +375,13 @@ class TestMergeInto(unittest.TestCase):
     def test_schema_field_added_when_missing(self) -> None:
         base = self._make_base_bom()
         result = self._merge(base, self._new_comps())
-        assert result["$schema"] == "https://cyclonedx.org/schema/bom-1.6.schema.json"
+        assert result["$schema"] == "https://cyclonedx.org/schema/bom-1.7.schema.json"
 
     def test_schema_field_preserved_when_present(self) -> None:
         base = self._make_base_bom()
-        base["$schema"] = "https://cyclonedx.org/schema/bom-1.6.schema.json"
+        base["$schema"] = "https://cyclonedx.org/schema/bom-1.7.schema.json"
         result = self._merge(base, self._new_comps())
-        assert result["$schema"] == "https://cyclonedx.org/schema/bom-1.6.schema.json"
+        assert result["$schema"] == "https://cyclonedx.org/schema/bom-1.7.schema.json"
 
 
 class TestAgainstRealCMakeLists(unittest.TestCase):
@@ -505,7 +505,7 @@ class TestMainCLI(unittest.TestCase):
 
     def test_schema_field_present(self) -> None:
         bom = self._run_main([])
-        assert bom["$schema"] == "https://cyclonedx.org/schema/bom-1.6.schema.json"
+        assert bom["$schema"] == "https://cyclonedx.org/schema/bom-1.7.schema.json"
 
     def test_leaf_dependency_entries_added_with_subject(self) -> None:
         bom = self._run_main(["--subject-name", "onnx", "--subject-version", "1.0.0"])
