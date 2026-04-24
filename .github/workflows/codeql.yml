@@ -56,7 +56,15 @@ jobs:
       uses: github/codeql-action/init@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4.32.4
       with:
         languages: ${{ matrix.language }}
-        config-file: ./.github/codeql/codeql-config.yml
+        config: |
+          queries:
+            - uses: security-extended
+            - uses: security-and-quality
+          paths-ignore:
+            - '.setuptools-cmake-build/**'
+          query-filters:
+            - exclude:
+                id: py/import-and-import-from
 
     # Install onnx so that it is found by the linters
     - name: Install ONNX
@@ -64,6 +72,7 @@ jobs:
         source workflow_scripts/protobuf/build_protobuf_unix.sh $(nproc)
         python -m pip install --quiet -r requirements-release_build.txt
         export ONNX_ML=1
+        export ONNX_BUILD_TESTS=1
         pip install .
 
     - name: Perform CodeQL Analysis
