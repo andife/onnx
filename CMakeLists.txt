@@ -209,10 +209,12 @@ if(NOT ONNX_BUILD_CUSTOM_PROTOBUF)
         set(Protobuf_USE_STATIC_LIBS ON)
       endif()
       find_package(Protobuf)
-      message(STATUS "Protobuf_FOUND: ${Protobuf_FOUND}")
-      message(STATUS "Protobuf_VERSION: ${Protobuf_VERSION}")
-      message(STATUS "Protobuf_INCLUDE_DIR: ${Protobuf_INCLUDE_DIR}")
-      message(STATUS "Protobuf_LITE_LIBRARY: ${Protobuf_LITE_LIBRARY}")
+      if(CMAKE_VERBOSE_MAKEFILE)
+        message(STATUS "Protobuf_FOUND: ${Protobuf_FOUND}")
+        message(STATUS "Protobuf_VERSION: ${Protobuf_VERSION}")
+        message(STATUS "Protobuf_INCLUDE_DIR: ${Protobuf_INCLUDE_DIR}")
+        message(STATUS "Protobuf_LITE_LIBRARY: ${Protobuf_LITE_LIBRARY}")
+      endif()
       if(Protobuf_FOUND)
         set(PROTOBUF_DIR "${_PROTOBUF_INSTALL_PREFIX}")
         set(Build_Protobuf OFF)
@@ -272,7 +274,7 @@ message(STATUS "protobuf_ABSL_USED_TARGETS after detection: ${protobuf_ABSL_USED
 # version may not be detectable by FindProtobuf.cmake, so protobuf_ABSL_USED_TARGETS
 # is never populated above.  Fall back to globbing for abseil/utf8_range static
 # libraries in the same build directory as the provided protobuf library.
-if(NOT protobuf_ABSL_USED_TARGETS AND DEFINED Protobuf_LITE_LIBRARY AND EXISTS "${Protobuf_LITE_LIBRARY}")
+if(NOT protobuf_ABSL_USED_TARGETS AND CMAKE_CROSSCOMPILING AND DEFINED Protobuf_LITE_LIBRARY AND EXISTS "${Protobuf_LITE_LIBRARY}")
   get_filename_component(_pb_build_dir "${Protobuf_LITE_LIBRARY}" DIRECTORY)
   file(GLOB_RECURSE _absl_fallback_libs LIST_DIRECTORIES false
     "${_pb_build_dir}/libabsl_*.a"
@@ -519,12 +521,10 @@ if(ONNX_BUILD_PYTHON)
   endif()
 
   # Configure nanobind: https://nanobind.readthedocs.io/en/latest/api_cmake.html
-  # FREE_THREADED and LTO are disabled for Pyodide: FREE_THREADED causes nanobind
-  # to call PyUnstable_Module_SetGIL(), which is outside the stable ABI and not
-  # exported by Pyodide's wasm runtime, causing the module to fail to load.
-  # pywasmcross does not set the EMSCRIPTEN cmake variable; detect via the node
-  # cross-compilation emulator that pyodide-build always injects.
-  if(CMAKE_CROSSCOMPILING_EMULATOR MATCHES "node")
+  # FREE_THREADED and LTO are disabled for Pyodide/Emscripten: FREE_THREADED causes
+  # nanobind to call PyUnstable_Module_SetGIL(), which is outside the stable ABI and
+  # not exported by Pyodide's wasm runtime, causing the module to fail to load.
+  if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     nanobind_add_module(
       onnx_cpp2py_export
       NB_STATIC NB_DOMAIN onnx STABLE_ABI
