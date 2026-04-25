@@ -137,6 +137,7 @@ jobs:
             -DProtobuf_PROTOC_EXECUTABLE=${{ github.workspace }}/protobuf-host/bin/protoc
             -DProtobuf_INCLUDE_DIR=${{ github.workspace }}/protobuf-wasm/src
             -DProtobuf_LITE_LIBRARY=${{ github.workspace }}/protobuf-wasm/build_source/libprotobuf-lite.a
+            -DCMAKE_VERBOSE_MAKEFILE=ON
         run: |
           source "$EMSDK/emsdk_env.sh" > /dev/null
           pyodide build

@@ -209,10 +209,15 @@ if(NOT ONNX_BUILD_CUSTOM_PROTOBUF)
         set(Protobuf_USE_STATIC_LIBS ON)
       endif()
       find_package(Protobuf)
+      message(STATUS "Protobuf_FOUND: ${Protobuf_FOUND}")
+      message(STATUS "Protobuf_VERSION: ${Protobuf_VERSION}")
+      message(STATUS "Protobuf_INCLUDE_DIR: ${Protobuf_INCLUDE_DIR}")
+      message(STATUS "Protobuf_LITE_LIBRARY: ${Protobuf_LITE_LIBRARY}")
       if(Protobuf_FOUND)
         set(PROTOBUF_DIR "${_PROTOBUF_INSTALL_PREFIX}")
         set(Build_Protobuf OFF)
         if("${Protobuf_VERSION}" VERSION_GREATER_EQUAL "4.22.0")
+          message(STATUS "Protobuf >= 4.22.0: searching for absl and utf8_range via find_package")
           # There are extra dependencies for protobuf.
           find_package(absl REQUIRED)
           find_package(utf8_range)
@@ -255,9 +260,28 @@ if(NOT ONNX_BUILD_CUSTOM_PROTOBUF)
             utf8_range::utf8_range
             utf8_range::utf8_validity
           )
+        else()
+          message(STATUS "Protobuf_VERSION '${Protobuf_VERSION}' < 4.22.0 or undetected: skipping absl find_package")
         endif()
       endif()
     endif()
+  endif()
+endif()
+message(STATUS "protobuf_ABSL_USED_TARGETS after detection: ${protobuf_ABSL_USED_TARGETS}")
+# When protobuf is pre-provided (e.g. Pyodide/Emscripten cross-compilation) the
+# version may not be detectable by FindProtobuf.cmake, so protobuf_ABSL_USED_TARGETS
+# is never populated above.  Fall back to globbing for abseil/utf8_range static
+# libraries in the same build directory as the provided protobuf library.
+if(NOT protobuf_ABSL_USED_TARGETS AND DEFINED Protobuf_LITE_LIBRARY AND EXISTS "${Protobuf_LITE_LIBRARY}")
+  get_filename_component(_pb_build_dir "${Protobuf_LITE_LIBRARY}" DIRECTORY)
+  file(GLOB_RECURSE _absl_fallback_libs LIST_DIRECTORIES false
+    "${_pb_build_dir}/libabsl_*.a"
+    "${_pb_build_dir}/libutf8_range.a"
+    "${_pb_build_dir}/libutf8_validity.a"
+  )
+  if(_absl_fallback_libs)
+    message(STATUS "Pre-provided protobuf: using abseil/utf8 static libs from ${_pb_build_dir}")
+    set(protobuf_ABSL_USED_TARGETS ${_absl_fallback_libs})
   endif()
 endif()
 if(NOT ONNX_PROTOC_EXECUTABLE)
