@@ -279,6 +279,14 @@ if(NOT protobuf_ABSL_USED_TARGETS AND DEFINED Protobuf_LITE_LIBRARY AND EXISTS "
     "${_pb_build_dir}/libutf8_range.a"
     "${_pb_build_dir}/libutf8_validity.a"
   )
+  if(EMSCRIPTEN AND _absl_fallback_libs)
+    # Exclude abseil debugging/signal-handling libraries that define EM_JS functions
+    # (e.g. HaveOffsetConverter) which are emscripten-internal and unavailable in
+    # WASM side-module (shared library) builds, causing link errors.
+    list(FILTER _absl_fallback_libs EXCLUDE REGEX
+      "libabsl_(failure_signal_handler|symbolize|stacktrace|examine_stack|debugging_internal|demangle_internal|leak_check)\.a$"
+    )
+  endif()
   if(_absl_fallback_libs)
     message(STATUS "Pre-provided protobuf: using abseil/utf8 static libs from ${_pb_build_dir}")
     set(protobuf_ABSL_USED_TARGETS ${_absl_fallback_libs})

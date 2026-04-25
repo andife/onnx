@@ -19,7 +19,7 @@ jobs:
 
     permissions:
       contents: read
-  
+
     if: github.event_name != 'pull_request' || startsWith(github.base_ref, 'rel-') || contains(github.event.pull_request.labels.*.name, 'run release CIs')
     runs-on: ubuntu-24.04
     env:
@@ -242,7 +242,7 @@ jobs:
 
     permissions:
           contents: read
-    
+
     env:
       OS_NAME: ${{ inputs.os || 'pyodide' }}
 
