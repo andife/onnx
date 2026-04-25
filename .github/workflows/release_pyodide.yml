@@ -305,6 +305,7 @@ jobs:
               model = onnx.parser.parse_model(
                   "agraph (float[N] x) => (float[N] y) { y = onnx.Relu(x) }"
               )
+              model.ir_version = onnx.IR_VERSION
               onnx.checker.check_model(model)
               inferred = onnx.shape_inference.infer_shapes(model)
               assert inferred is not None
