@@ -303,7 +303,7 @@ jobs:
               import onnx
 
               model = onnx.parser.parse_model(
-                  "agraph (float[N] x) => (float[N] y) { y = onnx.Relu(x) }"
+                  "agraph (float[N] x) => (float[N] y) { y = Relu(x) }"
               )
               model.ir_version = onnx.IR_VERSION
               model.opset_import.append(
