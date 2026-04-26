@@ -20,6 +20,7 @@ from onnx import (
     TensorProto,
     checker,
     helper,
+    shape_inference,
 )
 
 
@@ -2166,7 +2167,7 @@ class TestVersionConverter(unittest.TestCase):
             )
             self._converted(graph, helper.make_operatorsetid("", from_opset), to_opset)
 
-        self.assertRaises(RuntimeError, test)
+        self.assertRaises((RuntimeError, shape_inference.InferenceError), test)
 
     def test_softmax_13_12_rejects_malformed_flatten_input(self) -> None:
         def test() -> None:
@@ -2182,7 +2183,7 @@ class TestVersionConverter(unittest.TestCase):
             )
             self._converted(graph, helper.make_operatorsetid("", 13), 12)
 
-        self.assertRaises(RuntimeError, test)
+        self.assertRaises((RuntimeError, shape_inference.InferenceError), test)
 
     @parameterized.parameterized.expand(
         [
