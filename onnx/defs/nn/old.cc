@@ -2071,7 +2071,7 @@ static void convPoolShapeInference_opset1_to_11(
 }
 
 static std::function<void(OpSchema&)>
-PoolOpSchemaGenerator_9(const char* name, const char* opName, const char* additionalDescription) {
+PoolOpSchemaGenerator_opset1_to_8(const char* name, const char* opName, const char* additionalDescription) {
   return [=](OpSchema& schema) {
     std::string doc;
     POPULATE_OP_DOC_STR(
@@ -2252,7 +2252,7 @@ static std::function<void(OpSchema&)> PoolOpSchemaGenerator_opset10_to_11(
   };
 }
 
-static std::vector<std::string> GetSupportedDataTypesForPoolingOps_1(bool supports8bit) {
+static std::vector<std::string> GetSupportedDataTypesForPoolingOps_opset1_to_8(bool supports8bit) {
   if (supports8bit) {
     return {"tensor(float16)", "tensor(float)", "tensor(double)", "tensor(int8)", "tensor(uint8)"};
   }
@@ -2358,7 +2358,7 @@ or when ceil_mode is disabled:
         OpSchema::Differentiable);
     schema.TypeConstraint(
         "T",
-        GetSupportedDataTypesForPoolingOps_1(supports8bit),
+        GetSupportedDataTypesForPoolingOps_opset1_to_8(supports8bit),
         supports8bit ? "Constrain input and output types to float and 8 bit tensors."
                      : "Constrain input and output types to float tensors.");
     schema.TypeAndShapeInferenceFunction([use_dilation](InferenceContext& ctx) {
@@ -2379,7 +2379,7 @@ or when ceil_mode is disabled:
 ONNX_OPERATOR_SET_SCHEMA(
     AveragePool,
     1,
-    OpSchema().FillUsing(PoolOpSchemaGenerator_9(
+    OpSchema().FillUsing(PoolOpSchemaGenerator_opset1_to_8(
         "AveragePool",
         "average",
         "The output of each pooling window is divided by the number of elements exclude pad.")));
@@ -2388,7 +2388,7 @@ ONNX_OPERATOR_SET_SCHEMA(
     AveragePool,
     7,
     OpSchema()
-        .FillUsing(PoolOpSchemaGenerator_9(
+        .FillUsing(PoolOpSchemaGenerator_opset1_to_8(
             "AveragePool",
             "average",
             "The output of each pooling window is divided by the number of elements (exclude pad when attribute count_include_pad is zero)."))
@@ -2433,7 +2433,7 @@ ONNX_OPERATOR_SET_SCHEMA(
 ONNX_OPERATOR_SET_SCHEMA(
     MaxPool,
     1,
-    OpSchema().FillUsing(PoolOpSchemaGenerator_9(
+    OpSchema().FillUsing(PoolOpSchemaGenerator_opset1_to_8(
         "MaxPool",
         "max",
         "The output of each pooling window is maximum number of elements exclude pad.")));
@@ -2442,7 +2442,7 @@ ONNX_OPERATOR_SET_SCHEMA(
     MaxPool,
     8,
     OpSchema()
-        .FillUsing(PoolOpSchemaGenerator_9(
+        .FillUsing(PoolOpSchemaGenerator_opset1_to_8(
             "MaxPool",
             "max",
             "The output of each pooling window is maximum number of elements exclude pad."))
