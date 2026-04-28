@@ -130,12 +130,15 @@ jobs:
       - name: Build Pyodide wheel
         env:
           ONNX_ML: 1
+          CXXFLAGS: >-
+            -I${{ github.workspace }}/protobuf-wasm/third_party/abseil-cpp
+            -I${{ github.workspace }}/protobuf-wasm/third_party/utf8_range
           CMAKE_ARGS: >-
             -DONNX_USE_PROTOBUF_SHARED_LIBS=OFF
             -DONNX_USE_LITE_PROTO=ON
             -DONNX_PROTOC_EXECUTABLE=${{ github.workspace }}/protobuf-host/bin/protoc
             -DProtobuf_PROTOC_EXECUTABLE=${{ github.workspace }}/protobuf-host/bin/protoc
-            -DProtobuf_INCLUDE_DIR=${{ github.workspace }}/protobuf-wasm/install/include
+            -DProtobuf_INCLUDE_DIR=${{ github.workspace }}/protobuf-wasm/src
             -DProtobuf_LITE_LIBRARY=${{ github.workspace }}/protobuf-wasm/install/lib/libprotobuf-lite.a
             -DCMAKE_PREFIX_PATH=${{ github.workspace }}/protobuf-wasm/install
         run: |
