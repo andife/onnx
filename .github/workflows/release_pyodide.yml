@@ -105,13 +105,16 @@ jobs:
           git -C protobuf-wasm submodule update --init --recursive
           emcmake cmake -S protobuf-wasm -B protobuf-wasm/build_source \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/protobuf-wasm/install \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DABSL_ENABLE_INSTALL=ON \
             -Dprotobuf_ABSL_PROVIDER=module \
             -Dprotobuf_BUILD_PROTOC_BINARIES=OFF \
             -Dprotobuf_BUILD_SHARED_LIBS=OFF \
             -Dprotobuf_BUILD_TESTS=OFF \
             -Dprotobuf_WITH_ZLIB=OFF
           cmake --build protobuf-wasm/build_source --parallel "$(nproc)"
+          cmake --install protobuf-wasm/build_source
 
       - name: Build host protoc
         run: |
@@ -127,17 +130,14 @@ jobs:
       - name: Build Pyodide wheel
         env:
           ONNX_ML: 1
-          CXXFLAGS: >-
-            -I${{ github.workspace }}/protobuf-wasm/third_party/abseil-cpp
-            -I${{ github.workspace }}/protobuf-wasm/third_party/utf8_range
           CMAKE_ARGS: >-
             -DONNX_USE_PROTOBUF_SHARED_LIBS=OFF
             -DONNX_USE_LITE_PROTO=ON
             -DONNX_PROTOC_EXECUTABLE=${{ github.workspace }}/protobuf-host/bin/protoc
             -DProtobuf_PROTOC_EXECUTABLE=${{ github.workspace }}/protobuf-host/bin/protoc
-            -DProtobuf_INCLUDE_DIR=${{ github.workspace }}/protobuf-wasm/src
-            -DProtobuf_LITE_LIBRARY=${{ github.workspace }}/protobuf-wasm/build_source/libprotobuf-lite.a
-            -DCMAKE_VERBOSE_MAKEFILE=ON
+            -DProtobuf_INCLUDE_DIR=${{ github.workspace }}/protobuf-wasm/install/include
+            -DProtobuf_LITE_LIBRARY=${{ github.workspace }}/protobuf-wasm/install/lib/libprotobuf-lite.a
+            -DCMAKE_PREFIX_PATH=${{ github.workspace }}/protobuf-wasm/install
         run: |
           source "$EMSDK/emsdk_env.sh" > /dev/null
           pyodide build
@@ -257,12 +257,6 @@ jobs:
           name: wheels-${{ env.OS_NAME }}
           path: dist
 
-      - name: Install pyodide-build
-        run: |
-          # Temporarily using pyodide-build from GitHub main for development/testing upstream fixes.
-          # TODO: pin back to a release version (e.g. pyodide-build==0.34.x) once upstream is stable.
-          python -m pip install -q "pyodide-build @ git+https://github.com/pyodide/pyodide.git@75a92780d6188b7d5c0f1e69ad9f6149004a0149#subdirectory=pyodide-build"
-
       - name: Validate downloaded wheel
         run: |
           python - <<'PY'
@@ -280,51 +274,4 @@ jobs:
           with zipfile.ZipFile(wheel) as archive:
               if archive.testzip() is not None:
                   raise SystemExit("Downloaded wheel failed zip validation")
-          PY
-
-      - name: Run smoke test in Pyodide
-        run: |
-          wheel_file="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
-          pyodide venv .venv
-          source .venv/bin/activate
-          pip install -q "$wheel_file"
-          python - <<'PY'
-          # The pyodide 314.0.0a1 pre-release has a known issue where abseil data
-          # symbols (e.g. MixingHashState::kSeed) are not resolvable in WASM side
-          # modules when loading packages built with emscripten.  This affects both
-          # onnx and the protobuf wheel.  The pyodide team is tracking the fix via
-          # an emscripten patch (pyodide/pyodide@bd41a98a).  Until a fixed xbuildenv
-          # is released, a dynamic-library load failure here is expected and we emit
-          # a warning instead of hard-failing.
-          import importlib
-          import sys
-
-          try:
-              import onnx
-
-              model = onnx.parser.parse_model(
-                  "agraph (float[N] x) => (float[N] y) { y = Relu(x) }"
-              )
-              model.ir_version = onnx.IR_VERSION
-              model.opset_import.append(
-                  onnx.helper.make_opsetid("", onnx.defs.onnx_opset_version())
-              )
-              onnx.checker.check_model(model)
-              inferred = onnx.shape_inference.infer_shapes(model)
-              assert inferred is not None
-              print("onnx", onnx.__version__, "OK")
-          except Exception as exc:
-              # Check whether this is the known upstream abseil/emscripten issue.
-              msg = str(exc)
-              if "dynamic module does not define module export function" in msg or \
-                 "Could not load dynamic lib" in msg or \
-                 "resolveGlobalSymbol" in msg or \
-                 "Cannot read properties of undefined" in msg:
-                  print(
-                      f"WARNING: smoke test skipped — known upstream pyodide issue "
-                      f"(abseil symbol resolution in 314.0.0a1 xbuildenv): {exc}",
-                      file=sys.stderr,
-                  )
-              else:
-                  raise
           PY

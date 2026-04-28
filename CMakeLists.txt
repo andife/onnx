@@ -269,30 +269,6 @@ if(NOT ONNX_BUILD_CUSTOM_PROTOBUF)
     endif()
   endif()
 endif()
-message(STATUS "protobuf_ABSL_USED_TARGETS after detection: ${protobuf_ABSL_USED_TARGETS}")
-# When protobuf is pre-provided (e.g. Pyodide/Emscripten cross-compilation) the
-# version may not be detectable by FindProtobuf.cmake, so protobuf_ABSL_USED_TARGETS
-# is never populated above.  Fall back to globbing for abseil/utf8_range static
-# libraries in the same build directory as the provided protobuf library.
-if(NOT protobuf_ABSL_USED_TARGETS AND CMAKE_CROSSCOMPILING AND DEFINED Protobuf_LITE_LIBRARY AND EXISTS "${Protobuf_LITE_LIBRARY}")
-  get_filename_component(_pb_build_dir "${Protobuf_LITE_LIBRARY}" DIRECTORY)
-  file(GLOB_RECURSE _absl_fallback_libs LIST_DIRECTORIES false
-    "${_pb_build_dir}/libabsl_*.a"
-    "${_pb_build_dir}/libutf8_range.a"
-    "${_pb_build_dir}/libutf8_validity.a"
-  )
-  # Exclude abseil debugging/signal-handling libraries that define EM_JS functions
-  # (e.g. HaveOffsetConverter) which are emscripten-internal and unavailable in
-  # WASM side-module (shared library) builds, causing link errors.  These libs are
-  # never needed for ONNX's runtime use of protobuf-lite on any platform.
-  list(FILTER _absl_fallback_libs EXCLUDE REGEX
-    "libabsl_(failure_signal_handler|symbolize|stacktrace|examine_stack|debugging_internal|demangle_internal|leak_check)\\.a$"
-  )
-  if(_absl_fallback_libs)
-    message(STATUS "Pre-provided protobuf: using abseil/utf8 static libs from ${_pb_build_dir}")
-    set(protobuf_ABSL_USED_TARGETS ${_absl_fallback_libs})
-  endif()
-endif()
 if(NOT ONNX_PROTOC_EXECUTABLE)
     set(Build_Protobuf ON)
     set(protobuf_MSVC_STATIC_RUNTIME ${ONNX_USE_MSVC_STATIC_RUNTIME})
