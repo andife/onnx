@@ -2252,7 +2252,7 @@ static std::function<void(OpSchema&)> PoolOpSchemaGenerator_opset10_to_11(
   };
 }
 
-static std::vector<std::string> GetSupportedDataTypesForPoolingOps_opset1_to_8(bool supports8bit) {
+static std::vector<std::string> GetSupportedDataTypesForPoolingOps_opset11(bool supports8bit) {
   if (supports8bit) {
     return {"tensor(float16)", "tensor(float)", "tensor(double)", "tensor(int8)", "tensor(uint8)"};
   }
@@ -2358,7 +2358,7 @@ or when ceil_mode is disabled:
         OpSchema::Differentiable);
     schema.TypeConstraint(
         "T",
-        GetSupportedDataTypesForPoolingOps_opset1_to_8(supports8bit),
+        GetSupportedDataTypesForPoolingOps_opset11(supports8bit),
         supports8bit ? "Constrain input and output types to float and 8 bit tensors."
                      : "Constrain input and output types to float tensors.");
     schema.TypeAndShapeInferenceFunction([use_dilation](InferenceContext& ctx) {
