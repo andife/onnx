@@ -219,13 +219,15 @@ if(NOT ONNX_BUILD_CUSTOM_PROTOBUF)
         set(PROTOBUF_DIR "${_PROTOBUF_INSTALL_PREFIX}")
         set(Build_Protobuf OFF)
         if("${Protobuf_VERSION}" VERSION_GREATER_EQUAL "4.22.0")
-          if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-            # Skip find_package(absl) for Emscripten: cmake's imported absl targets
-            # carry transitive dependencies on absl::examine_stack, which defines
-            # HaveOffsetConverter as an EM_JS function.  EM_JS functions cannot be
-            # linked into wasm side-modules and cause a hard linker error.  The safe
-            # subset of abseil static libraries is picked up via the glob below.
-            message(STATUS "Emscripten build: skipping find_package(absl) to avoid EM_JS transitive deps")
+          if(DEFINED CMAKE_CROSSCOMPILING_EMULATOR)
+            # Skip find_package(absl) for Pyodide/Emscripten: pyodide-build uses
+            # pywasmcross compiler wrappers and sets CMAKE_CROSSCOMPILING_EMULATOR
+            # (to node.js) but does not set CMAKE_SYSTEM_NAME=Emscripten.  cmake's
+            # imported absl targets carry transitive deps on absl::examine_stack,
+            # which defines HaveOffsetConverter as an EM_JS function; EM_JS functions
+            # cannot be linked into wasm side-modules and cause a hard linker error.
+            # The safe subset of abseil static libs is picked up via the glob below.
+            message(STATUS "Pyodide/Emscripten build: skipping find_package(absl) to avoid EM_JS transitive deps")
           else()
             message(STATUS "Protobuf >= 4.22.0: searching for absl and utf8_range via find_package")
             # There are extra dependencies for protobuf.
@@ -284,7 +286,7 @@ endif()
 # object files contain EM_JS functions (e.g. HaveOffsetConverter in
 # examine_stack) that the emscripten linker rejects in wasm side-modules.
 if(NOT protobuf_ABSL_USED_TARGETS
-   AND CMAKE_SYSTEM_NAME STREQUAL "Emscripten"
+   AND DEFINED CMAKE_CROSSCOMPILING_EMULATOR
    AND DEFINED Protobuf_LITE_LIBRARY
    AND EXISTS "${Protobuf_LITE_LIBRARY}")
   get_filename_component(_pb_lib_dir "${Protobuf_LITE_LIBRARY}" DIRECTORY)
@@ -297,7 +299,7 @@ if(NOT protobuf_ABSL_USED_TARGETS
     "libabsl_(failure_signal_handler|symbolize|stacktrace|examine_stack|debugging_internal|demangle_internal|leak_check)\\.a$"
   )
   if(_absl_wasm_libs)
-    message(STATUS "Emscripten: linking safe abseil/utf8 static libs from ${_pb_lib_dir}")
+    message(STATUS "Pyodide/Emscripten: linking safe abseil/utf8 static libs from ${_pb_lib_dir}")
     set(protobuf_ABSL_USED_TARGETS ${_absl_wasm_libs})
   endif()
 endif()
