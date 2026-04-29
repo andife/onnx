@@ -219,54 +219,86 @@ if(NOT ONNX_BUILD_CUSTOM_PROTOBUF)
         set(PROTOBUF_DIR "${_PROTOBUF_INSTALL_PREFIX}")
         set(Build_Protobuf OFF)
         if("${Protobuf_VERSION}" VERSION_GREATER_EQUAL "4.22.0")
-          message(STATUS "Protobuf >= 4.22.0: searching for absl and utf8_range via find_package")
-          # There are extra dependencies for protobuf.
-          find_package(absl REQUIRED)
-          find_package(utf8_range)
-          message(STATUS "absl_VERSION: ${absl_VERSION}")
-          set(protobuf_ABSL_USED_TARGETS
-            absl::absl_check
-            absl::absl_log
-            absl::algorithm
-            absl::base
-            absl::bind_front
-            absl::bits
-            absl::btree
-            absl::cleanup
-            absl::cord
-            absl::core_headers
-            absl::debugging
-            absl::die_if_null
-            absl::dynamic_annotations
-            absl::flags
-            absl::flat_hash_map
-            absl::flat_hash_set
-            absl::function_ref
-            absl::hash
-            absl::layout
-            absl::log_initialize
-            absl::log_severity
-            absl::memory
-            absl::node_hash_map
-            absl::node_hash_set
-            absl::optional
-            absl::span
-            absl::status
-            absl::statusor
-            absl::strings
-            absl::synchronization
-            absl::time
-            absl::type_traits
-            absl::utility
-            absl::variant
-            utf8_range::utf8_range
-            utf8_range::utf8_validity
-          )
+          if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+            # Skip find_package(absl) for Emscripten: cmake's imported absl targets
+            # carry transitive dependencies on absl::examine_stack, which defines
+            # HaveOffsetConverter as an EM_JS function.  EM_JS functions cannot be
+            # linked into wasm side-modules and cause a hard linker error.  The safe
+            # subset of abseil static libraries is picked up via the glob below.
+            message(STATUS "Emscripten build: skipping find_package(absl) to avoid EM_JS transitive deps")
+          else()
+            message(STATUS "Protobuf >= 4.22.0: searching for absl and utf8_range via find_package")
+            # There are extra dependencies for protobuf.
+            find_package(absl REQUIRED)
+            find_package(utf8_range)
+            message(STATUS "absl_VERSION: ${absl_VERSION}")
+            set(protobuf_ABSL_USED_TARGETS
+              absl::absl_check
+              absl::absl_log
+              absl::algorithm
+              absl::base
+              absl::bind_front
+              absl::bits
+              absl::btree
+              absl::cleanup
+              absl::cord
+              absl::core_headers
+              absl::debugging
+              absl::die_if_null
+              absl::dynamic_annotations
+              absl::flags
+              absl::flat_hash_map
+              absl::flat_hash_set
+              absl::function_ref
+              absl::hash
+              absl::layout
+              absl::log_initialize
+              absl::log_severity
+              absl::memory
+              absl::node_hash_map
+              absl::node_hash_set
+              absl::optional
+              absl::span
+              absl::status
+              absl::statusor
+              absl::strings
+              absl::synchronization
+              absl::time
+              absl::type_traits
+              absl::utility
+              absl::variant
+              utf8_range::utf8_range
+              utf8_range::utf8_validity
+            )
+          endif()
         else()
           message(STATUS "Protobuf_VERSION '${Protobuf_VERSION}' < 4.22.0 or undetected: skipping absl find_package")
         endif()
       endif()
     endif()
+  endif()
+endif()
+# For Emscripten, find_package(absl) is skipped above.  Glob the installed
+# abseil/utf8_range static libraries directly from the same directory as the
+# pre-built protobuf library, then exclude the debugging sub-libraries whose
+# object files contain EM_JS functions (e.g. HaveOffsetConverter in
+# examine_stack) that the emscripten linker rejects in wasm side-modules.
+if(NOT protobuf_ABSL_USED_TARGETS
+   AND CMAKE_SYSTEM_NAME STREQUAL "Emscripten"
+   AND DEFINED Protobuf_LITE_LIBRARY
+   AND EXISTS "${Protobuf_LITE_LIBRARY}")
+  get_filename_component(_pb_lib_dir "${Protobuf_LITE_LIBRARY}" DIRECTORY)
+  file(GLOB _absl_wasm_libs LIST_DIRECTORIES false
+    "${_pb_lib_dir}/libabsl_*.a"
+    "${_pb_lib_dir}/libutf8_range.a"
+    "${_pb_lib_dir}/libutf8_validity.a"
+  )
+  list(FILTER _absl_wasm_libs EXCLUDE REGEX
+    "libabsl_(failure_signal_handler|symbolize|stacktrace|examine_stack|debugging_internal|demangle_internal|leak_check)\\.a$"
+  )
+  if(_absl_wasm_libs)
+    message(STATUS "Emscripten: linking safe abseil/utf8 static libs from ${_pb_lib_dir}")
+    set(protobuf_ABSL_USED_TARGETS ${_absl_wasm_libs})
   endif()
 endif()
 if(NOT ONNX_PROTOC_EXECUTABLE)
