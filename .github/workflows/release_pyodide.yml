@@ -132,6 +132,7 @@ jobs:
             -I${{ github.workspace }}/protobuf-wasm/third_party/abseil-cpp
             -I${{ github.workspace }}/protobuf-wasm/third_party/utf8_range
           CMAKE_ARGS: >-
+            -DONNX_PYODIDE_BUILD=ON
             -DONNX_USE_PROTOBUF_SHARED_LIBS=OFF
             -DONNX_USE_LITE_PROTO=ON
             -DONNX_PROTOC_EXECUTABLE=${{ github.workspace }}/protobuf-host/bin/protoc

@@ -49,6 +49,7 @@ option(ONNX_INSTALL "Install ONNX targets, headers, and CMake config files" ON)
 if(WIN32)
   option(ONNX_USE_MSVC_STATIC_RUNTIME "Build with MSVC static runtime. Ignored if CMAKE_MSVC_RUNTIME_LIBRARY is defined." OFF)
 endif()
+option(ONNX_PYODIDE_BUILD "Build ONNX for Pyodide/Emscripten (wasm32)." OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -219,15 +220,12 @@ if(NOT ONNX_BUILD_CUSTOM_PROTOBUF)
         set(PROTOBUF_DIR "${_PROTOBUF_INSTALL_PREFIX}")
         set(Build_Protobuf OFF)
         if("${Protobuf_VERSION}" VERSION_GREATER_EQUAL "4.22.0")
-          if(DEFINED CMAKE_CROSSCOMPILING_EMULATOR)
-            # Skip find_package(absl) for Pyodide/Emscripten: pyodide-build uses
-            # pywasmcross compiler wrappers and sets CMAKE_CROSSCOMPILING_EMULATOR
-            # (to node.js) but does not set CMAKE_SYSTEM_NAME=Emscripten.  cmake's
-            # imported absl targets carry transitive deps on absl::examine_stack,
-            # which defines HaveOffsetConverter as an EM_JS function; EM_JS functions
-            # cannot be linked into wasm side-modules and cause a hard linker error.
-            # The safe subset of abseil static libs is picked up via the glob below.
-            message(STATUS "Pyodide/Emscripten build: skipping find_package(absl) to avoid EM_JS transitive deps")
+          if(ONNX_PYODIDE_BUILD)
+            # find_package(absl) is skipped for Pyodide: cmake imported targets
+            # carry transitive deps on absl::examine_stack (EM_JS, hard linker
+            # error in wasm side-modules).  Safe static libs are linked via
+            # cmake/PyodideBuild.cmake included below.
+            message(STATUS "Pyodide build: skipping find_package(absl) to avoid EM_JS transitive deps")
           else()
             message(STATUS "Protobuf >= 4.22.0: searching for absl and utf8_range via find_package")
             # There are extra dependencies for protobuf.
@@ -280,28 +278,8 @@ if(NOT ONNX_BUILD_CUSTOM_PROTOBUF)
     endif()
   endif()
 endif()
-# For Emscripten, find_package(absl) is skipped above.  Glob the installed
-# abseil/utf8_range static libraries directly from the same directory as the
-# pre-built protobuf library, then exclude the debugging sub-libraries whose
-# object files contain EM_JS functions (e.g. HaveOffsetConverter in
-# examine_stack) that the emscripten linker rejects in wasm side-modules.
-if(NOT protobuf_ABSL_USED_TARGETS
-   AND DEFINED CMAKE_CROSSCOMPILING_EMULATOR
-   AND DEFINED Protobuf_LITE_LIBRARY
-   AND EXISTS "${Protobuf_LITE_LIBRARY}")
-  get_filename_component(_pb_lib_dir "${Protobuf_LITE_LIBRARY}" DIRECTORY)
-  file(GLOB _absl_wasm_libs LIST_DIRECTORIES false
-    "${_pb_lib_dir}/libabsl_*.a"
-    "${_pb_lib_dir}/libutf8_range.a"
-    "${_pb_lib_dir}/libutf8_validity.a"
-  )
-  list(FILTER _absl_wasm_libs EXCLUDE REGEX
-    "libabsl_(failure_signal_handler|symbolize|stacktrace|examine_stack|debugging_internal|demangle_internal|leak_check)\\.a$"
-  )
-  if(_absl_wasm_libs)
-    message(STATUS "Pyodide/Emscripten: linking safe abseil/utf8 static libs from ${_pb_lib_dir}")
-    set(protobuf_ABSL_USED_TARGETS ${_absl_wasm_libs})
-  endif()
+if(ONNX_PYODIDE_BUILD)
+  include(cmake/PyodideBuild.cmake)
 endif()
 if(NOT ONNX_PROTOC_EXECUTABLE)
     set(Build_Protobuf ON)
@@ -531,10 +509,10 @@ if(ONNX_BUILD_PYTHON)
   endif()
 
   # Configure nanobind: https://nanobind.readthedocs.io/en/latest/api_cmake.html
-  # FREE_THREADED and LTO are disabled for Pyodide/Emscripten: FREE_THREADED causes
-  # nanobind to call PyUnstable_Module_SetGIL(), which is outside the stable ABI and
-  # not exported by Pyodide's wasm runtime, causing the module to fail to load.
-  if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  # FREE_THREADED and LTO are disabled for Pyodide: FREE_THREADED causes nanobind
+  # to call PyUnstable_Module_SetGIL(), which is outside the stable ABI and not
+  # exported by Pyodide's wasm runtime, causing the module to fail to load.
+  if(ONNX_PYODIDE_BUILD)
     nanobind_add_module(
       onnx_cpp2py_export
       NB_STATIC NB_DOMAIN onnx STABLE_ABI
