@@ -141,18 +141,16 @@ jobs:
           persist-credentials: false
           submodules: true
 
-      - name: "WARNING: about to publish to PyPI-release"
+      - name: Log release gate inputs
         env:
           PUBLISH_PYPI_RELEASE: ${{ github.event.inputs.publish_pypi_release }}
           RELEASE_TYPE: ${{ github.event.inputs.release_type }}
           CONFIRM_PUBLISH_RELEASE: ${{ github.event.inputs.confirm_publish_release }}
         run: |
-          echo "####################################################################"
-          echo "WARNING: This run will publish to pypi-release. Be certain you want to do this."
+          echo "Release gate inputs (audit record):"
           echo "publish_pypi_release=${PUBLISH_PYPI_RELEASE}"
           echo "release_type=${RELEASE_TYPE}"
           echo "confirm_publish_release=${CONFIRM_PUBLISH_RELEASE}"
-          echo "####################################################################"
 
       - name: Check if package_version matches branch
         env:
@@ -172,10 +170,11 @@ jobs:
             fi
           else
             # For release-candidate allow branch_version or branch_versionrc*
-            if [[ "$package_version" != "$branch_version" && "$package_version" != "$branch_version"rc* ]]; then
-              echo "Error: Package version ($package_version) does not match branch version ($branch_version) or expected RC format."
-              exit 1
-            fi
+            case "$package_version" in
+              "$branch_version" | "$branch_version"rc*) ;;
+              *) echo "Error: Package version ($package_version) does not match branch version ($branch_version) or expected RC format."
+                 exit 1 ;;
+            esac
           fi
 
   check_for_publish_preview_build_to_testpypi_weekly:
