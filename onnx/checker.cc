@@ -158,6 +158,47 @@ static void check_attribute_tensors_ir_version(const AttributeProto& attr, const
   }
 }
 
+static void check_graph_data_types_ir_version(const GraphProto& graph, const CheckerContext& ctx);
+
+// TrainingInfoProto graphs are not otherwise passed through check_graph. Walk
+// only their data-type-bearing fields so this check does not impose unrelated
+// graph-validation behavior on training information.
+static void check_attribute_data_types_ir_version(const AttributeProto& attr, const CheckerContext& ctx) {
+  check_attribute_tensors_ir_version(attr, ctx);
+  if (attr.has_g()) {
+    check_graph_data_types_ir_version(attr.g(), ctx);
+  }
+  for (const auto& graph : attr.graphs()) {
+    check_graph_data_types_ir_version(graph, ctx);
+  }
+}
+
+static void check_graph_data_types_ir_version(const GraphProto& graph, const CheckerContext& ctx) {
+  for (const auto& value_info : graph.input()) {
+    check_type_ir_version(value_info.type(), value_info.name(), ctx);
+  }
+  for (const auto& value_info : graph.output()) {
+    check_type_ir_version(value_info.type(), value_info.name(), ctx);
+  }
+  for (const auto& value_info : graph.value_info()) {
+    check_type_ir_version(value_info.type(), value_info.name(), ctx);
+  }
+  for (const auto& tensor : graph.initializer()) {
+    check_data_type_ir_version(tensor.data_type(), tensor.name(), ctx);
+  }
+  for (const auto& sparse_tensor : graph.sparse_initializer()) {
+    check_data_type_ir_version(
+        sparse_tensor.values().data_type(), sparse_tensor.values().name(), ctx);
+    check_data_type_ir_version(
+        sparse_tensor.indices().data_type(), sparse_tensor.indices().name(), ctx);
+  }
+  for (const auto& node : graph.node()) {
+    for (const auto& attr : node.attribute()) {
+      check_attribute_data_types_ir_version(attr, ctx);
+    }
+  }
+}
+
 void check_value_info(const ValueInfoProto& value_info, const CheckerContext& ctx) {
   enforce_non_empty_field(value_info, name);
   check_type_ir_version(value_info.type(), value_info.name(), ctx);
@@ -1431,6 +1472,15 @@ static void check_model(const ModelProto& model, CheckerContext& ctx) {
   ctx.set_opset_imports(opset_imports);
   LexicalScopeContext lex_ctx;
   check_graph(model.graph(), ctx, lex_ctx);
+
+  for (const auto& training_info : model.training_info()) {
+    if (training_info.has_initialization()) {
+      check_graph_data_types_ir_version(training_info.initialization(), ctx);
+    }
+    if (training_info.has_algorithm()) {
+      check_graph_data_types_ir_version(training_info.algorithm(), ctx);
+    }
+  }
 
   if (ctx.get_ir_version() >= 0x00000008) {
     check_model_local_functions(model, ctx, lex_ctx);

@@ -1808,6 +1808,38 @@ class TestChecker:
         model.ir_version = 11
         checker.check_model(model)
 
+    @pytest.mark.parametrize("location", ["initialization", "algorithm"])
+    def test_check_model_training_data_type_requires_ir_version(
+        self, location: str
+    ) -> None:
+        """Data types in TrainingInfoProto graphs must match the model IR version."""
+        training_graph = helper.make_graph(
+            [],
+            "training",
+            [],
+            [],
+            [helper.make_tensor("state", TensorProto.FLOAT4E2M1, [0], [])],
+        )
+        empty_graph = helper.make_graph([], "empty", [], [])
+        if location == "initialization":
+            training_info = helper.make_training_info(
+                empty_graph, [], training_graph, []
+            )
+        else:
+            training_info = helper.make_training_info(training_graph, [], None, None)
+
+        model = helper.make_model(
+            helper.make_graph([], "main", [], []),
+            ir_version=10,
+            opset_imports=[helper.make_opsetid("", 21)],
+        )
+        model.training_info.extend([training_info])
+        with pytest.raises(checker.ValidationError, match="requires IR version >= 11"):
+            checker.check_model(model)
+
+        model.ir_version = 11
+        checker.check_model(model)
+
     def test_check_tensor_complex_data_too_small(self) -> None:
         """COMPLEX64/COMPLEX128 store 2 value-field entries (real, imag) per element."""
         tensor = TensorProto()
